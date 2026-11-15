@@ -1,0 +1,1861 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>算料清单 · FF14 材料台账</title>
+<link rel="stylesheet" href="recipe-test.css">
+<link rel="stylesheet" href="pagenav.css">
+<style>
+  .target-list { padding: 0 14px; }
+  .target-row { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 0; border-top: 1px solid #eef1f5; }
+  .target-row:first-child { border-top: 0; }
+  .clear-all-row { padding: 8px 14px 0; }
+  .clear-all-row button.danger {
+    width: 100%; height: 34px; border: 1px solid #c0392b; background: #fff;
+    color: #c0392b; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .clear-all-row button.danger:hover { background: #fff5f5; }
+  .clear-all-row button.danger.armed { background: #c0392b; color: #fff; }
+  .undo-delete[hidden] { display: none; }
+  .undo-delete {
+    margin: 8px 14px 0; padding: 8px 10px; border: 1px solid #e3e8ee; border-radius: 8px;
+    background: #fafbfc; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 10px;
+  }
+  .undo-delete button {
+    height: 26px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px;
+    background: #fff; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .ts-wrap { display: inline-flex; align-items: center; gap: 6px; }
+  .ts-text { font-size: 12px; color: var(--muted); }
+  .hq-all-wrap { display: inline-flex; align-items: center; gap: 6px; }
+  .hq-all-text { font-size: 12px; color: var(--muted); }
+  .hq-all-wrap.disabled .switch { opacity: .5; }
+  .switch.sm .track { width: 36px; height: 20px; flex: 0 0 36px; }
+  .switch.sm .thumb { width: 16px; height: 16px; top: 2px; left: 2px; }
+  .switch.sm input:checked + .track .thumb { transform: translateX(16px); }
+  .target-row .ic { flex: 0 0 22px; }
+  .target-row .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .target-row input[type="number"] { width: 78px; height: 30px; flex: 0 0 78px; }
+  .target-row .del { height: 28px; padding: 0 8px; font-size: 12px; flex: 0 0 auto; white-space: nowrap; }
+  .target-row .switch { flex: 0 0 auto; }
+  .target-row .del.armed,
+  .list-tools #del-list.armed { background: #c0392b; border-color: #c0392b; color: #fff; }
+  .target-row .drag-handle {
+    flex: 0 0 18px; width: 18px; height: 28px; padding: 0; border: 0; background: transparent;
+    color: #a7b0bb; font-size: 15px; line-height: 28px; cursor: grab; touch-action: none;
+  }
+  .target-row .drag-handle:active { cursor: grabbing; }
+  .target-row.dragging {
+    background: #f4fafb; border-radius: 8px;
+    outline: 2px solid var(--accent); outline-offset: -2px;
+  }
+  body.dragging-row { user-select: none; -webkit-user-select: none; }
+  .group-head {
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+    font-size: 12px; color: var(--muted); background: #f8fafc; border-top: 1px solid #eef1f5;
+  }
+  .group-head .g-name { font-weight: 600; color: var(--text); }
+  .group-head .g-meta { margin-left: auto; font-variant-numeric: tabular-nums; text-align: right; }
+  .group-head.base-toggle {
+    width: 100%; height: auto; border: 0; border-top: 1px solid #eef1f5;
+    border-radius: 0; background: #f8fafc; font: inherit; font-size: 12px;
+    text-align: left; cursor: pointer;
+  }
+  .group-head.base-toggle:hover { background: #f1f7f9; }
+  .group-head .arrow { color: var(--muted); }
+  .target-actions { display: flex; align-items: center; gap: 10px; padding: 10px 14px 14px; flex-wrap: wrap; }
+  .target-actions #go { margin-left: auto; }
+  .paste-box { padding: 0 14px 14px; }
+  .paste-box textarea { width: 100%; height: 110px; border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px; font: inherit; font-size: 13px; resize: vertical; }
+  .paste-actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+  .target-progress { padding: 6px 14px 10px; }
+  .target-progress .t-row { display: flex; gap: 10px; font-size: 13px; padding: 3px 0; }
+  .t-row .t-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-row .t-meta { color: var(--muted); white-space: nowrap; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 13px; color: var(--muted); }
+  .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .switch .track { position: relative; width: 44px; height: 26px; border-radius: 999px; background: #d7dde5;
+    box-shadow: inset 0 1px 2px rgba(15,23,42,.10); transition: background .2s; flex: 0 0 44px; }
+  .switch .thumb { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+    background: linear-gradient(#fff, #f2f5f8); box-shadow: 0 1px 3px rgba(15,23,42,.28), inset 0 0 0 .5px rgba(255,255,255,.7);
+    transition: transform .22s cubic-bezier(.2,.8,.2,1); }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track .thumb { transform: translateX(18px); }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .details .source-btn { margin: 4px 8px 0 0; }
+  .trade-foot { text-align: center; font-size: 12px; color: var(--muted); padding: 14px 0 8px; }
+  .copy-group { margin-left: 6px; height: 26px; padding: 0 8px; font-size: 12px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--accent); cursor: pointer; }
+  .npc-cheaper { color: #0d7a4f; font-weight: 600; }
+  .switch .hq { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--accent);
+    border: 1px solid #b9d2d8; background: #eef6f7; border-radius: 999px; padding: 0 6px; }
+  .hq-badge { font-size: 11px; font-weight: 700; color: var(--accent); border: 1px solid #b9d2d8;
+    background: #eef6f7; border-radius: 999px; padding: 0 6px; margin-right: 6px; }
+  .list-tools { display: flex; align-items: center; gap: 8px; padding: 0 14px 14px; flex-wrap: wrap; }
+  .list-tools input#save-name { flex: 1 1 140px; height: 30px; border: 1px solid var(--line);
+    border-radius: 8px; padding: 0 8px; font: inherit; font-size: 12px; min-width: 0; }
+  .list-tools select { height: 30px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px;
+    background: #fff; color: var(--text); max-width: 180px; }
+  .list-tools button { height: 30px; font-size: 12px; padding: 0 10px; }
+  .list-tools label.import { height: 30px; display: inline-flex; align-items: center; font-size: 12px;
+    color: var(--muted); cursor: pointer; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; }
+  @media (max-width: 600px) {
+    .target-progress .t-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; row-gap: 2px; align-items: center; }
+    .target-progress .t-row .ic { grid-row: 1; align-self: center; }
+    .target-progress .t-row .t-name { grid-column: 2; white-space: normal; overflow: visible; text-overflow: clip; }
+    .target-progress .t-row .t-meta { grid-column: 2; white-space: normal; }
+    .target-actions #go { margin-left: 0; width: 100%; }
+    .form .field.grow { flex: 1 1 130px; min-width: 0; }
+    #add { flex: 0 0 auto; padding: 0 12px; }
+    .list-tools { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 6px; }
+    .list-tools #save-name { grid-column: 1 / 3; }
+    .list-tools #save-list { grid-column: 3; }
+    .list-tools #saved-lists { grid-column: 1 / 3; max-width: none; }
+    .list-tools #load-list { grid-column: 3; }
+    .list-tools #del-list { grid-column: 1; }
+    .list-tools #export-list { grid-column: 2; }
+    .list-tools label.import { grid-column: 3; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+        <header>
+    <h1>算料清单（测试阶段）</h1>
+    <nav class="pagenav" aria-label="页面切换">
+      <a href="/" title="库存（Alt+1）">库存</a>
+      <a href="/calculator.html" class="on" aria-current="page" title="算料清单（Alt+2）">算料清单（测试阶段）</a>
+    </nav>
+    <span class="tag">v0.12.3</span>
+  </header>
+  <div class="meta" id="meta">配方数据读取中…</div>
+
+  <div class="panel">
+    <div class="section-label">我的清单</div>
+    <div class="form">
+      <div class="field grow">
+        <label for="q">添加成品</label>
+        <input type="text" id="q" placeholder="搜索成品名，例如 高地小麦粉" autocomplete="off">
+        <div class="sug" id="sug"></div>
+      </div>
+      <div class="field">
+        <label for="qty">数量</label>
+        <input type="number" id="qty" value="1" min="1" max="9999999" step="1" inputmode="numeric">
+      </div>
+      <button class="primary" id="add">添加</button>
+    </div>
+
+    <div class="target-list" id="target-list"></div>
+    <div class="clear-all-row" id="clear-all-row" hidden>
+      <button type="button" id="clear-all" class="danger">全部删除</button>
+    </div>
+    <div class="undo-delete" id="undo-delete" hidden>
+      <span id="undo-delete-text"></span>
+      <button type="button" id="undo-delete-btn">撤销</button>
+    </div>
+    <div class="list-hint" id="ts-hint" hidden>当前按全新生产计算，不抵扣仓库已有成品</div>
+
+    <div class="target-actions">
+      <label class="check" id="stock-wrap"><input type="checkbox" id="stock" checked> <span id="stock-text">使用库存</span></label>
+      <div class="ts-wrap" title="勾选：目标已有成品时只算缺口；取消：目标按全新生产算，不抵扣已有成品">
+        <span class="ts-text">目标抵扣</span>
+        <label class="switch sm"><input type="checkbox" id="target-stock" checked aria-label="目标抵扣"><span class="track"><span class="thumb"></span></span></label>
+      </div>
+      <button type="button" id="paste-toggle">粘贴一批</button>
+      <button class="primary" id="go">生成总清单</button>
+    </div>
+
+    <details class="box" id="calc-opts">
+      <summary>计算选项</summary>
+      <div class="opts-pad">
+        <div class="hq-all-wrap">
+          <span class="hq-all-text">全部 HQ</span>
+          <label class="switch sm" title="全部 HQ"><input type="checkbox" id="hq-all"><span class="track"><span class="thumb"></span></span></label>
+        </div>
+        <label class="check"><input type="checkbox" id="price"> 算买齐</label>
+        <label class="check"><input type="checkbox" id="tax" checked> 含税5%</label>
+        <div class="price-bar" id="price-bar" hidden>
+          <span class="lbl">买价</span>
+          <select id="region" aria-label="价格大区">
+            <option>豆豆柴</option><option>陆行鸟</option><option>莫古力</option><option>猫小胖</option>
+          </select>
+          <select id="scope" aria-label="价格范围">
+            <option value="dc">大区最低</option><option value="world">本服</option>
+          </select>
+          <select id="world" aria-label="服务器" hidden></select>
+        </div>
+      </div>
+    </details>
+
+    <details class="box" id="list-manage">
+      <summary>清单管理</summary>
+      <div class="opts-pad list-tools">
+        <input id="save-name" type="text" placeholder="清单名，例如 裁缝理符" aria-label="清单名称">
+        <button type="button" id="save-list">保存</button>
+        <select id="saved-lists" aria-label="已保存的清单"></select>
+        <button type="button" id="load-list">载入</button>
+        <button type="button" id="del-list">删</button>
+        <button type="button" id="export-list">导出</button>
+        <label class="import">导入<input type="file" id="import-list" accept=".json,application/json" hidden></label>
+      </div>
+    </details>
+
+    <div class="paste-box" id="paste-box" hidden>
+      <textarea id="paste-text" placeholder="一行一个：&#10;高地小麦粉 x 20&#10;亚斯拉尼蒜头 x 10&#10;（全角 ×、逗号、制表符都行）"></textarea>
+      <div class="paste-actions">
+        <button type="button" id="paste-apply">解析并添加</button>
+        <span class="computed" id="paste-hint"></span>
+      </div>
+    </div>
+  </div>
+
+  <main class="panel" style="margin-top:14px">
+    <div class="section-label" id="result-label" hidden>结果</div>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <div class="banner" id="result-error" role="alert" aria-atomic="true" hidden>
+      <span id="result-error-text"></span>
+      <button type="button" class="source-btn" id="result-error-retry">重试</button>
+      <button type="button" class="source-btn" id="result-error-close" aria-label="关闭错误提示">×</button>
+    </div>
+    <div id="result"><div class="empty">添加成品和数量，然后生成总清单。</div></div>
+  </main>
+
+  <div class="trade-foot">四大区交易 / 反馈群：<b>1031294093</b>
+    <button type="button" class="copy-group" data-copy-group="1031294093">复制群号</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<button type="button" class="exit-btn" id="exit-btn" title="退出程序（两次点击确认）">退出</button>
+<div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="live-alert" class="sr-only" role="alert" aria-atomic="true"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const QTY_MAX = 9999999;   // 与后端上限一致
+function parsePositiveInt(raw) {
+  const s = String(raw == null ? "" : raw).trim();
+  if (!/^\d+$/.test(s)) return 0;
+  const n = Number(s);
+  return n >= 1 && n <= QTY_MAX ? n : 0;
+}
+
+function announce(msg, kind) {
+  const el = document.getElementById(kind === "alert" ? "live-alert" : "live-status");
+  if (!el) return;
+  el.textContent = "";
+  setTimeout(() => { el.textContent = msg; }, 30);
+}
+
+function toast(msg, kind) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove("show"), 1800);
+  announce(msg, kind);
+}
+
+// ── 退出程序：两次点击确认；后端仅允许本机调用 ──
+(function () {
+  const btn = document.getElementById("exit-btn");
+  if (!btn) return;
+  let armed = false;
+  let timer = null;
+  const disarm = () => {
+    armed = false;
+    clearTimeout(timer);
+    btn.textContent = "退出";
+    btn.classList.remove("armed");
+  };
+  btn.addEventListener("click", async () => {
+    if (!armed) {
+      armed = true;
+      btn.textContent = "确认退出";
+      btn.classList.add("armed");
+      announce("再次点击将退出程序，5 秒内有效，按 Esc 取消", "alert");
+      timer = setTimeout(disarm, 5000);
+      return;
+    }
+    clearTimeout(timer);
+    armed = false;
+    btn.disabled = true;
+    btn.textContent = "退出中…";
+    try {
+      const res = await fetch("/api/exit", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" },
+          csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        body: "{}",
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!d.ok) {
+        toast(d.error || "退出失败", "alert");
+        btn.disabled = false;
+        btn.textContent = "退出";
+        return;
+      }
+      announce("程序已退出");
+      document.body.innerHTML =
+        '<div style="padding:80px 24px;text-align:center;font-size:18px;line-height:2">' +
+        "程序已退出，黑窗口已关闭。<br>可以关闭此页面了。</div>";
+    } catch (e) {
+      toast("退出失败：" + e.message, "alert");
+      btn.disabled = false;
+      btn.textContent = "退出";
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && armed) disarm();
+  });
+})();
+
+let resultErrorRetry = null;
+
+function showResultError(msg, retry) {
+  const box = $("#result-error");
+  if (!box) return;
+  $("#result-error-text").textContent = msg;
+  resultErrorRetry = typeof retry === "function" ? retry : null;
+  $("#result-error-retry").hidden = !resultErrorRetry;
+  box.hidden = false;
+  announce(msg, "alert");
+}
+
+function hideResultError() {
+  const box = $("#result-error");
+  if (box) box.hidden = true;
+  resultErrorRetry = null;
+}
+
+$("#result-error-retry").addEventListener("click", () => {
+  const fn = resultErrorRetry;
+  hideResultError();
+  if (fn) fn();
+});
+$("#result-error-close").addEventListener("click", hideResultError);
+
+async function getJSON(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  return r.json();
+}
+
+async function postJSON(url, body, retried) {
+  const headers = { "Content-Type": "application/json" };
+  if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(body || {}),
+    cache: "no-store",
+  });
+  if (r.status === 403 && !retried) {
+    try {
+      const s = await getJSON("/api/state");
+      csrfToken = s.csrf_token || "";
+    } catch (e) { /* 保持旧值 */ }
+    return postJSON(url, body, true);
+  }
+  return r.json();
+}
+
+/* ---------------- 清单编辑 ---------------- */
+
+let targets = [];
+let csrfToken = "";
+let pickedId = 0;
+let pickedCanHq;
+let sugTimer = null;
+let sugIndex = -1;
+let sugItems = [];
+let dirty = false;
+let lite = false;
+let targetStock = true;
+let clearArmed = false;
+let clearTimer = null;
+let lastDeleted = null;
+let delArmedId = 0;
+let delTimer = null;
+let delListArmed = "";
+let delListTimer = null;
+let drag = null;
+let baseOpen = false;
+let baseSearchClosed = false;
+let overrides = {};
+
+const TARGETS_KEY = "recipeMultiTargetsV1";
+const OVERRIDES_KEY = "recipeMultiOverridesV1";
+const TARGET_STOCK_KEY = "recipeMultiTargetStockV1";
+const DELETED_KEY = "recipeMultiDeletedV1";
+const BASE_OPEN_KEY = "recipeMultiBaseOpenV1";
+const ROW_DELAY_MS = 5000;
+const SAVED_KEY = "recipeSavedListsV1";
+let savedLists = [];
+
+function canHqFromApi(v) {
+  return !(v === 0 || v === false);
+}
+
+function saveTargets() {
+  try { localStorage.setItem(TARGETS_KEY, JSON.stringify(targets)); } catch (e) { /* ignore */ }
+}
+
+function syncRowDeleteButtons() {
+  document.querySelectorAll("#target-list [data-del]").forEach((btn) => {
+    const id = Number(btn.dataset.del);
+    const armed = delArmedId === id;
+    const name = btn.closest(".target-row") ? btn.closest(".target-row").querySelector(".nm").textContent : "";
+    btn.classList.toggle("armed", armed);
+    btn.textContent = armed ? "确认删" : "删";
+    btn.title = armed ? "再点一次删除" : "点两次删除";
+    btn.setAttribute("aria-label", (armed ? "确认删除 " : "删除 ") + name);
+  });
+}
+
+function resetRowDelete() {
+  const had = delArmedId;
+  delArmedId = 0;
+  if (delTimer) { clearTimeout(delTimer); delTimer = null; }
+  if (had) syncRowDeleteButtons();
+}
+
+function armRowDelete(id) {
+  resetRowDelete();
+  delArmedId = id;
+  syncRowDeleteButtons();
+  const btn = document.querySelector('#target-list [data-del="' + id + '"]');
+  if (btn) btn.focus({ preventScroll: true });
+  const name = btn && btn.closest(".target-row")
+    ? btn.closest(".target-row").querySelector(".nm").textContent : "";
+  announce("再次点击删除 " + name + "，5 秒内有效，按 Esc 取消");
+  delTimer = setTimeout(() => {
+    delTimer = null;
+    if (delArmedId === id) { delArmedId = 0; syncRowDeleteButtons(); }
+  }, ROW_DELAY_MS);
+}
+
+function resetDeleteList() {
+  delListArmed = "";
+  if (delListTimer) { clearTimeout(delListTimer); delListTimer = null; }
+  const btn = document.getElementById("del-list");
+  if (btn) {
+    btn.classList.remove("armed");
+    btn.textContent = "删";
+    btn.setAttribute("title", "删除当前清单（需确认）");
+    btn.setAttribute("aria-label", "删除当前清单");
+  }
+}
+
+function loadBaseOpen() {
+  try { baseOpen = localStorage.getItem(BASE_OPEN_KEY) === "1"; } catch (e) { baseOpen = false; }
+}
+
+function saveBaseOpen() {
+  try { localStorage.setItem(BASE_OPEN_KEY, baseOpen ? "1" : "0"); } catch (e) { /* ignore */ }
+}
+
+function loadTargetStock() {
+  try { targetStock = localStorage.getItem(TARGET_STOCK_KEY) !== "0"; } catch (e) { targetStock = true; }
+  const el = document.getElementById("target-stock");
+  if (el) el.checked = targetStock;
+  const hint = document.getElementById("ts-hint");
+  if (hint) hint.hidden = targetStock || !document.getElementById("stock")?.checked;
+}
+
+function loadOverrides() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}");
+    overrides = {};
+    Object.keys(raw || {}).forEach((k) => {
+      if (/^\d+$/.test(k) && (raw[k] === "buy" || raw[k] === "craft")) overrides[k] = raw[k];
+    });
+  } catch (e) { overrides = {}; }
+}
+
+function saveOverrides() {
+  try { localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides)); } catch (e) { /* ignore */ }
+}
+
+function loadTargets() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TARGETS_KEY) || "[]");
+    if (Array.isArray(raw)) {
+      targets = raw.filter((t) => t && Number(t.item_id) > 0 && parsePositiveInt(t.quantity) > 0)
+        .map((t) => ({ item_id: Number(t.item_id), name: String(t.name || ""), quantity: parsePositiveInt(t.quantity),
+          hq: !!t.hq, can_hq: !(t.can_hq === false || t.can_hq === 0) }));
+    }
+  } catch (e) { targets = []; }
+}
+
+function markDirty() {
+  dirty = true;
+  const c = document.getElementById("copy"); if (c) c.disabled = true;
+}
+
+function renderTargets() {
+  const box = $("#target-list");
+  if (!targets.length) {
+    resetRowDelete();
+    box.innerHTML = '<div class="empty" style="padding:8px 0">还没有成品。上面搜索成品、填数量，点「添加」。</div>';
+    updateHqAll();
+    updateClearAll();
+    return;
+  }
+  updateHqAll();
+  updateClearAll();
+  box.innerHTML = targets.map((t, i) => {
+    const id = Number(t.item_id);
+    const armed = delArmedId === id;
+    return '<div class="target-row" data-row-id="' + id + '">' +
+      '<button type="button" class="drag-handle" data-drag="' + id + '"' +
+        ' aria-label="拖动排序 ' + esc(t.name) + '（手柄上按 ↑/↓，或 Alt+↑/↓）" title="按住拖动排序（键盘 Alt+↑/↓）">⠿</button>' +
+      iconFor(id) +
+      '<span class="nm" title="' + esc(t.name) + '">' + esc(t.name) + "</span>" +
+      (t.can_hq === false ? "" :
+        '<label class="switch sm" title="HQ"><input type="checkbox" data-hq="' + i + '"' +
+        (t.hq ? " checked" : "") + ' aria-label="' + esc(t.name) + ' HQ"><span class="track"><span class="thumb"></span></span></label>') +
+      '<input type="number" min="1" max="9999999" step="1" inputmode="numeric" value="' + t.quantity + '" data-qty="' + i + '" aria-label="' + esc(t.name) + ' 数量">' +
+      '<button type="button" class="del' + (armed ? " armed" : "") + '" data-del="' + id + '"' +
+        ' title="' + (armed ? "再点一次删除" : "点两次删除") + '"' +
+        ' aria-label="' + (armed ? "确认删除 " : "删除 ") + esc(t.name) + '">' +
+        (armed ? "确认删" : "删") + "</button>" +
+    "</div>";
+  }).join("");
+}
+
+async function loadTargetIcons() {
+  const ids = [...new Set(targets.map((t) => Number(t.item_id)).filter((id) => id > 0 && !icons[String(id)]))];
+  if (!ids.length) { renderTargets(); return; }
+  try {
+    const r = await getJSON("/api/icons?ids=" + ids.join(","));
+    Object.assign(icons, r.icons || {});
+    renderTargets();
+  } catch (e) { /* ignore */ }
+}
+
+function hqEligible() {
+  return targets.filter((t) => t.can_hq !== false);
+}
+
+function updateHqAll() {
+  const el = document.getElementById("hq-all");
+  if (!el) return;
+  const list = hqEligible();
+  el.disabled = !list.length;
+  el.checked = list.length > 0 && list.every((t) => t.hq);
+  const wrap = el.closest(".hq-all-wrap");
+  if (wrap) wrap.classList.toggle("disabled", !list.length);
+}
+
+function resetClearAll() {
+  clearArmed = false;
+  if (clearTimer) { clearTimeout(clearTimer); clearTimer = null; }
+  const btn = document.getElementById("clear-all");
+  if (btn) {
+    btn.classList.remove("armed");
+    btn.textContent = "全部删除（" + targets.length + " 项）";
+  }
+}
+
+function updateClearAll() {
+  const row = document.getElementById("clear-all-row");
+  const btn = document.getElementById("clear-all");
+  if (!row || !btn) return;
+  row.hidden = !targets.length;
+  if (!targets.length) { resetClearAll(); return; }
+  if (!clearArmed) btn.textContent = "全部删除（" + targets.length + " 项）";
+}
+
+function saveDeletedSnapshot(count) {
+  lastDeleted = {
+    targets: JSON.parse(JSON.stringify(targets)),
+    overrides: JSON.parse(JSON.stringify(overrides)),
+    at: Date.now(),
+    count: count,
+  };
+  try {
+    const arr = JSON.parse(localStorage.getItem(DELETED_KEY) || "[]");
+    arr.unshift(lastDeleted);
+    localStorage.setItem(DELETED_KEY, JSON.stringify(arr.slice(0, 5)));
+  } catch (e) { /* ignore */ }
+}
+
+function hideUndoDelete() {
+  lastDeleted = null;
+  const bar = document.getElementById("undo-delete");
+  if (bar) bar.hidden = true;
+}
+
+function showUndoDelete(count) {
+  const bar = document.getElementById("undo-delete");
+  if (!bar) return;
+  document.getElementById("undo-delete-text").textContent = "已删除 " + count + " 项";
+  bar.hidden = false;
+}
+
+function loadDeletedSnapshot() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(DELETED_KEY) || "[]");
+    if (Array.isArray(arr) && arr.length && Array.isArray(arr[0].targets)) {
+      lastDeleted = arr[0];
+      if (!targets.length) showUndoDelete(lastDeleted.count || lastDeleted.targets.length);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function addTarget(id, name, qty, canHq) {
+  qty = parsePositiveInt(qty);
+  if (!qty) { toast("数量必须是 1–9999999 的整数", "alert"); return false; }
+  hideUndoDelete();
+  resetRowDelete();
+  const exist = targets.find((t) => t.item_id === id);
+  if (exist) {
+    const merged = Number(exist.quantity) + qty;
+    if (merged > QTY_MAX) {
+      toast("同一物品合并后不能超过 " + QTY_MAX + " 件，未添加", "alert");
+      return false;
+    }
+    exist.quantity = merged;
+  } else {
+    targets.push({ item_id: id, name: name, quantity: qty, hq: false, can_hq: canHqFromApi(canHq) });
+  }
+  renderTargets();
+  saveTargets();
+  markDirty();
+  loadTargetIcons();
+  return true;
+}
+
+async function addFromInput() {
+  const q = $("#q").value.trim();
+  const qty = parsePositiveInt($("#qty").value);
+  if (!q) { toast("先输入成品名"); $("#q").focus(); return; }
+  if (!qty) { toast("数量必须是 1–9999999 的整数", "alert"); $("#qty").focus(); return; }
+  let id = pickedId;
+  let name = q;
+  let canHq = pickedCanHq;
+  if (!id) {
+    const data = await getJSON("/api/item_search?q=" + encodeURIComponent(q));
+    const items = data.items || [];
+    const exact = items.find((it) => it.name === q) || items[0];
+    if (!exact) { toast("没找到这个物品", "alert"); return; }
+    id = Number(exact.id);
+    name = exact.name;
+    canHq = exact.can_be_hq;
+  }
+  if (!addTarget(id, name, qty, canHq)) return;
+  $("#q").value = "";
+  $("#qty").value = "1";
+  pickedId = 0;
+  pickedCanHq = undefined;
+  toast("已添加 " + name);
+}
+
+/* ---------------- 联想 ---------------- */
+
+function closeSug() { $("#sug").style.display = "none"; sugIndex = -1; }
+
+function renderSug(items) {
+  sugItems = items; sugIndex = -1;
+  const box = $("#sug");
+  if (!items.length) { box.style.display = "none"; return; }
+  box.innerHTML = items.map((it, i) =>
+    '<div data-i="' + i + '"><span>' + esc(it.name) + '</span><span class="id">#' + esc(it.id) + "</span></div>").join("");
+  box.style.display = "block";
+}
+
+async function searchItems(q) {
+  if (!q) { closeSug(); return; }
+  const data = await getJSON("/api/item_search?q=" + encodeURIComponent(q));
+  // 请求回来时焦点可能已经移到数量/别处，不要再把列表弹出来
+  if (document.activeElement !== document.getElementById("q")) return;
+  renderSug((data.items || []).slice(0, 8));
+}
+
+function pickItem(it) {
+  pickedId = Number(it.id);
+  pickedCanHq = it.can_be_hq;
+  $("#q").value = it.name;
+  closeSug();
+  $("#qty").focus();
+}
+
+let qComposing = false;
+$("#q").addEventListener("compositionstart", () => { qComposing = true; });
+$("#q").addEventListener("compositionend", () => {
+  qComposing = false;
+  pickedId = 0;
+  clearTimeout(sugTimer);
+  searchItems($("#q").value.trim());
+});
+$("#q").addEventListener("focus", () => {
+  const v = $("#q").value.trim();
+  if (v && !pickedId) searchItems(v);
+});
+$("#q").addEventListener("input", (e) => {
+  if (qComposing || e.isComposing) return;
+  pickedId = 0;
+  clearTimeout(sugTimer);
+  const v = $("#q").value.trim();
+  sugTimer = setTimeout(() => searchItems(v), 160);
+});
+
+$("#q").addEventListener("keydown", (e) => {
+  if (e.isComposing) return;
+  const box = $("#sug");
+  const open = box.style.display === "block";
+  if (e.key === "Escape") { closeSug(); return; }
+  if (!open) { if (e.key === "Enter") { e.preventDefault(); addFromInput(); } return; }
+  const n = sugItems.length;
+  if (e.key === "ArrowDown") { sugIndex = (sugIndex + 1) % n; e.preventDefault(); }
+  else if (e.key === "ArrowUp") { sugIndex = (sugIndex - 1 + n) % n; e.preventDefault(); }
+  else if (e.key === "Enter") {
+    if (sugIndex >= 0 && sugItems[sugIndex]) { pickItem(sugItems[sugIndex]); e.preventDefault(); return; }
+    if (n === 1) { pickItem(sugItems[0]); e.preventDefault(); return; }
+    closeSug(); e.preventDefault(); addFromInput(); return;
+  } else return;
+  box.querySelectorAll("div").forEach((d, i) => d.classList.toggle("active", i === sugIndex));
+});
+
+$("#sug").addEventListener("click", (e) => {
+  const d = e.target.closest("[data-i]");
+  if (d && sugItems[Number(d.dataset.i)]) pickItem(sugItems[Number(d.dataset.i)]);
+});
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#sug") && e.target.id !== "q") closeSug();
+});
+
+$("#qty").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addFromInput(); } });
+$("#add").addEventListener("click", addFromInput);
+
+function moveTargetBy(id, dir) {
+  const i = targets.findIndex((t) => Number(t.item_id) === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= targets.length) return false;
+  const row = targets.splice(i, 1)[0];
+  targets.splice(j, 0, row);
+  renderTargets(); saveTargets(); markDirty();
+  const h = document.querySelector('#target-list [data-drag="' + id + '"]');
+  if (h) h.focus();
+  announce("已移动到第 " + (j + 1) + " 位");
+  return true;
+}
+
+$("#target-list").addEventListener("click", (e) => {
+  const del = e.target.closest("[data-del]");
+  if (!del) return;
+  const id = Number(del.dataset.del);
+  if (!(id > 0)) return;
+  resetClearAll();   // 两个删除确认不叠加，避免残留的“全部删除”被一次点掉
+  if (delArmedId !== id) { armRowDelete(id); return; }
+  resetRowDelete();
+  const idx = targets.findIndex((t) => Number(t.item_id) === id);
+  if (idx < 0) { renderTargets(); return; }
+  hideUndoDelete();
+  const removedName = targets[idx].name;
+  targets.splice(idx, 1);
+  renderTargets(); saveTargets(); markDirty();
+  announce("已删除 " + removedName);
+});
+
+$("#target-list").addEventListener("keydown", (e) => {
+  const arrow = e.key === "ArrowUp" || e.key === "ArrowDown";
+  if (!arrow) return;
+  const row = e.target.closest("[data-row-id]");
+  if (!row) return;
+  const onHandle = !!e.target.closest("[data-drag]");
+  const plainOnHandle = onHandle && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey;
+  const altAnywhere = e.altKey && !e.ctrlKey && !e.metaKey;
+  if (!plainOnHandle && !altAnywhere) return;   // 手柄上可直接 ↑/↓，其他控件仍用 Alt+↑/↓
+  e.preventDefault();
+  moveTargetBy(Number(row.dataset.rowId), e.key === "ArrowUp" ? -1 : 1);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  resetClearAll();
+  resetRowDelete();
+  resetDeleteList();
+});
+
+/* 拖动排序：Pointer Events（手机可用）。监听挂 window，行被 insertBefore 后也不丢结束事件 */
+let dragListeners = false;
+
+function onDragMove(e) {
+  if (!drag) return;
+  if (!drag.moved && Math.abs(e.clientY - drag.startY) < 4) return;
+  drag.moved = true;
+  const rows = [...document.querySelectorAll("#target-list .target-row")];
+  const over = rows.find((r) => {
+    if (r === drag.row) return false;
+    const rect = r.getBoundingClientRect();
+    return e.clientY >= rect.top && e.clientY <= rect.bottom;
+  });
+  if (!over) return;
+  const rect = over.getBoundingClientRect();
+  const before = e.clientY < rect.top + rect.height / 2;
+  over.parentNode.insertBefore(drag.row, before ? over : over.nextSibling);
+}
+
+function endDrag() {
+  if (!drag) return;
+  const moved = drag.moved;
+  const movedId = drag.id;
+  const row = drag.row;
+  drag = null;
+  row.classList.remove("dragging");
+  document.body.classList.remove("dragging-row");
+  if (dragListeners) {
+    window.removeEventListener("pointermove", onDragMove);
+    window.removeEventListener("pointerup", endDrag);
+    window.removeEventListener("pointercancel", endDrag);
+    dragListeners = false;
+  }
+  if (!moved) return;
+  const order = [...document.querySelectorAll("#target-list .target-row")]
+    .map((r) => Number(r.dataset.rowId));
+  const byId = new Map(targets.map((t) => [Number(t.item_id), t]));
+  const next = order.map((id) => byId.get(id)).filter(Boolean);
+  if (next.length !== targets.length) { renderTargets(); return; }
+  targets = next;
+  saveTargets(); renderTargets(); markDirty();
+  const pos = targets.findIndex((t) => Number(t.item_id) === movedId) + 1;
+  if (pos > 0) announce("已移动到第 " + pos + " 位");
+}
+
+$("#target-list").addEventListener("pointerdown", (e) => {
+  const handle = e.target.closest("[data-drag]");
+  if (!handle || (e.pointerType === "mouse" && e.button !== 0)) return;
+  const row = handle.closest(".target-row");
+  if (!row) return;
+  e.preventDefault();
+  drag = { id: Number(handle.dataset.drag), row: row, startY: e.clientY, moved: false };
+  handle.focus({ preventScroll: true });
+  row.classList.add("dragging");
+  document.body.classList.add("dragging-row");
+  if (!dragListeners) {
+    window.addEventListener("pointermove", onDragMove, { passive: false });
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
+    dragListeners = true;
+  }
+});
+
+window.addEventListener("pagehide", endDrag);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") endDrag();
+});
+
+$("#target-list").addEventListener("change", (e) => {
+  const hq = e.target.closest("[data-hq]");
+  if (hq) {
+    const i = Number(hq.dataset.hq);
+    if (targets[i]) { targets[i].hq = hq.checked; saveTargets(); markDirty(); }
+    return;
+  }
+  const inp = e.target.closest("[data-qty]");
+  if (!inp) return;
+  const i = Number(inp.dataset.qty);
+  const v = parsePositiveInt(inp.value);
+  if (!v) {
+    inp.value = targets[i] ? targets[i].quantity : 1;
+    toast("数量必须是 1–9999999 的整数", "alert");
+    return;
+  }
+  hideUndoDelete();
+  targets[i].quantity = v;
+  saveTargets(); markDirty();
+});
+
+/* ---------------- 粘贴 ---------------- */
+
+$("#paste-toggle").addEventListener("click", () => {
+  const box = $("#paste-box");
+  box.hidden = !box.hidden;
+  if (!box.hidden) $("#paste-text").focus();
+});
+
+function parseLine(line) {
+  const s = line.trim();
+  if (!s) return null;
+  let m = s.match(/^(.*?)\s*[,，]\s*(\d+)\s*$/);
+  if (!m) m = s.match(/^(.*?)\s*[x×*]\s*(\d+)\s*$/i);
+  if (!m) m = s.match(/^(.*?)\s+(\d+)\s*$/);
+  if (!m) return null;
+  const name = m[1].trim();
+  const qty = Number(m[2]);
+  if (!name || !qty || qty > QTY_MAX) return null;
+  return { name, qty };
+}
+
+async function applyPaste() {
+  const text = $("#paste-text").value;
+  const lines = text.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  if (!lines.length) { toast("没有可解析的内容"); return; }
+  let ok = 0, fail = 0;
+  for (const line of lines) {
+    const parsed = parseLine(line);
+    if (!parsed) { fail++; continue; }
+    const data = await getJSON("/api/item_search?q=" + encodeURIComponent(parsed.name));
+    const items = data.items || [];
+    const exact = items.find((it) => it.name === parsed.name) || items[0];
+    if (!exact) { fail++; continue; }
+    if (!addTarget(Number(exact.id), exact.name, parsed.qty, exact.can_be_hq)) { fail++; continue; }
+    ok++;
+  }
+  $("#paste-hint").textContent = "已添加 " + ok + " 项" + (fail ? "，失败 " + fail + " 行" : "");
+  if (ok) { $("#paste-text").value = ""; $("#paste-box").hidden = true; }
+}
+
+$("#paste-apply").addEventListener("click", applyPaste);
+
+/* ---------------- 结果 ---------------- */
+
+let lastData = null;
+let activeTab = "get";
+let filterText = "";
+let sortMode = "qty";
+let requestSeq = 0;
+let icons = {};
+let prices = {};
+let buyData = null;
+let compareCache = {};
+let taxOn = true;
+let npcData = {};
+let npcVersion = "";
+const TAX_RATE = 1.05;
+let priceOn = false;
+let priceRegion = "豆豆柴";
+let priceScope = "dc";
+let priceWorld = "";
+let priceLabel = "";
+let expanded = new Set();
+
+function taxed(n) {
+  const v = Number(n) || 0;
+  return taxOn ? Math.round(v * TAX_RATE) : v;
+}
+
+function money(n) {
+  return taxed(n).toLocaleString("en-US");
+}
+
+function fmtQty(q, stack) {
+  const n = Math.max(0, Math.floor(Number(q) || 0));
+  const st = Number(stack) || 0;
+  if (!st || st <= 1 || n < st) return String(n);
+  const g = Math.floor(n / st), r = n % st;
+  return g + "组" + (r ? r : "");
+}
+
+function groupData(data) {
+  const stock = !!data.stock;
+  const g = { get: [], craft: [], done: [] };
+  (data.intermediate || []).forEach((it) => {
+    if (it.source === "buy") {
+      const left = Number(it.to_buy) || 0;
+      (left > 0 ? g.get : stock ? g.done : g.get).push({ kind: "buy", it, left });
+    } else {
+      const left = Number(it.to_craft) || 0;
+      if (left > 0) g.craft.push({ kind: "craft", it, left });
+      else if (stock) g.done.push({ kind: "craft", it, left: 0 });
+    }
+  });
+  (data.base || []).forEach((b) => {
+    const left = stock ? (Number(b.to_get) || 0) : (Number(b.need) || 0);
+    if (left > 0 || !stock) g.get.push({ kind: "base", it: b, left });
+    else g.done.push({ kind: "base", it: b, left: 0 });
+  });
+  (data.targets || []).forEach((t) => {
+    const covered = (Number(t.from_stock) || 0) >= (Number(t.quantity) || 0);
+    if (stock && (Number(t.to_craft) || 0) === 0 && covered &&
+        !g.done.some((x) => x.it.item_id === t.item_id)) {
+      g.done.push({ kind: "target", it: t, left: 0 });
+    }
+  });
+  const byName = (a, b) => String(a.it.name).localeCompare(String(b.it.name), "zh-CN");
+  g.get.sort((a, b) => b.left - a.left || byName(a, b));
+  g.done.sort(byName);
+  g.craft.sort((a, b) => (Number(b.it.depth) || 0) - (Number(a.it.depth) || 0) || b.left - a.left || byName(a, b));
+  return g;
+}
+
+function iconFor(id) {
+  const src = icons[String(id)];
+  return '<img class="ic" alt="" loading="lazy"' + (src ? ' src="' + esc(src) + '"' : "") + ">";
+}
+
+function detailsFor(e, stock) {
+  const it = e.it;
+  const lines = [];
+  const bi = priceOn && buyData && buyData.ok ? (buyData.items || []).find((x) => x.item_id === it.item_id) : null;
+  const un = priceOn && buyData && buyData.ok ? (buyData.unresolved || []).find((x) => x.item_id === it.item_id) : null;
+  const npc = priceOn ? npcData[String(it.item_id)] : null;
+  const marketUnit = bi && Number(bi.filled) > 0 ? taxed(bi.cost) / Number(bi.filled) : null;
+  if (stock) {
+    lines.push("理论需要 " + (Number(it.need) || 0) + " · 库存抵扣 " + (Number(it.from_stock) || 0));
+    if (Array.isArray(it.where) && it.where.length) {
+      lines.push("在：" + it.where.map((w) => (Number(w.hq) ? "HQ " : "") + esc(w.character || "?") + "·" + esc(w.location || "?") + " " + (Number(w.qty) || 0)).join(" / "));
+    }
+  } else {
+    lines.push("未使用库存，本清单为理论需求。");
+  }
+  if (e.kind === "craft" && e.left > 0) {
+    lines.push("需制作 " + e.left + " · 每批 " + (it.per_batch || 1) + " · 做 " + (it.craft_count || 0) +
+      " 批 · 实际产出 " + (it.produced || 0) + ((Number(it.surplus) || 0) > 0 ? " · 多出 " + it.surplus : ""));
+  }
+  if (priceOn && e.kind !== "craft") {
+    if (bi) {
+      lines.push("买齐：" + bi.filled + "/" + bi.need + " · 成本 " + money(bi.cost) +
+        " 金 · 均 " + money(bi.avg_unit) + " 金" + (taxOn ? "（含税 5%）" : ""));
+      if (Array.isArray(bi.listings_used) && bi.listings_used.length) {
+        const top = bi.listings_used.slice(0, 3);
+        lines.push("挂单：" + top.map((u) => u.price + "×" + u.qty +
+          (u.world ? "（" + esc(u.world) + "）" : "")).join(" + ") +
+          (bi.listings_used.length > 3 ? " 等 " + bi.listings_used.length + " 档" : ""));
+      }
+    } else if (un) {
+      lines.push("买齐：无挂单，缺 " + un.short + " 个，未计入总价。");
+    } else if (e.left > 0) {
+      lines.push("买齐：暂无" + (priceLabel || "该范围") + "报价。");
+    }
+    if (npc) {
+      lines.push("NPC：" + Number(npc.price).toLocaleString("en-US") + " 金/个");
+      if (Array.isArray(npc.shops) && npc.shops.length) {
+        const uniq = [...new Set(npc.shops.map((s) => (s.name || "NPC 商店")))];
+        const names = uniq.slice(0, 2).map((x) => (x.length > 20 ? x.slice(0, 18) + "…" : x));
+        lines.push("商店：" + names.join(" / ") + (uniq.length > 2 ? " 等 " + uniq.length + " 家" : ""));
+      }
+      if (marketUnit != null && Number(npc.price) < marketUnit) {
+        lines.push("NPC 更便宜，省 " + Math.round(marketUnit - Number(npc.price)).toLocaleString("en-US") + " 金/个");
+      }
+      if ((npc.quest_required || []).length) lines.push("前置：任务 " + npc.quest_required.join("、"));
+      if ((npc.achievement_required || []).length) lines.push("前置：成就 " + npc.achievement_required.join("、"));
+    }
+  }
+  if (e.kind === "craft" || e.kind === "buy") {
+    const next = e.kind === "buy" ? "craft" : "buy";
+    lines.push('<button type="button" class="source-btn" data-src="' + Number(it.item_id) +
+      '" data-next="' + next + '">' + (next === "buy" ? "改为直接购买" : "改为自制") + "</button>");
+  }
+  if (e.kind === "craft" && e.left > 0) {
+    const key = compareKey(it.item_id, e.left);
+    const cmp = compareCache[key];
+    lines.push('<button type="button" class="source-btn" data-compare="' + Number(it.item_id) +
+      '" data-qty="' + e.left + '"' + (cmp && cmp.loading ? " disabled" : "") + ">" +
+      (cmp && cmp.loading ? "对比中…" : "对比买 vs 自制") + "</button>");
+    if (cmp && !cmp.loading) {
+      if (cmp.error) lines.push("对比失败：" + cmp.error);
+      else if (cmp.incomplete) lines.push("报价不完整（缺货或部分失败），暂不比较；可换大区或稍后重试");
+      else {
+        const qty = e.left;
+        const buyCost = cmp.buyCost == null ? null : taxed(cmp.buyCost);
+        const craftCost = cmp.craftCost == null ? null : taxed(cmp.craftCost);
+        const unit = (v) => v == null ? "?" : Math.round(v / qty).toLocaleString("en-US");
+        const buyTxt = buyCost == null ? "买：无挂单" : "买：" + unit(buyCost) + " 金/个 · 合计 " + buyCost.toLocaleString("en-US");
+        const craftTxt = "自制：" + unit(craftCost) + " 金/个 · 合计 " + Number(craftCost || 0).toLocaleString("en-US");
+        let verdict = "";
+        if (buyCost != null && craftCost != null) {
+          const diff = buyCost - craftCost;
+          verdict = diff > 0 ? " · 自制省 " + diff.toLocaleString("en-US") + " 金"
+            : diff < 0 ? " · 直接买省 " + Math.abs(diff).toLocaleString("en-US") + " 金" : " · 持平";
+        }
+        lines.push(buyTxt + " / " + craftTxt + verdict);
+        lines.push("依据：按挂单深度 · " + (taxOn ? "含税 5%" : "不含税") + " · 自制按递归材料市场价");
+      }
+    }
+  }
+  if (Array.isArray(it.used_by) && it.used_by.length) {
+    const top = it.used_by.slice(0, 5);
+    lines.push("用于：" + top.map((u) => esc(u.name) + " ×" + u.qty).join(" / ") +
+      (it.used_by.length > 5 ? " 等 " + it.used_by.length + " 项" : ""));
+  }
+  return '<div class="details">' + lines.map((s) =>
+    s.startsWith("<button") ? s : "<p>" + s + "</p>").join("") + "</div>";
+}
+
+function rowEntry(e, stock) {
+  const it = e.it;
+  const stockBit = stock && (Number(it.from_stock) || 0) > 0 ? " · 库存抵 " + it.from_stock : "";
+  const bi = priceOn && buyData && buyData.ok ? (buyData.items || []).find((x) => x.item_id === it.item_id) : null;
+  const un = priceOn && buyData && buyData.ok ? (buyData.unresolved || []).find((x) => x.item_id === it.item_id) : null;
+  let num = "";
+  let src = "";
+  if (e.left === 0) {
+    num = "已备齐";
+    src = stock && Number(it.from_stock) > 0 ? "库存 " + it.from_stock : "";
+  } else if (e.kind === "target") {
+    num = "已备齐" + (Number(it.from_stock) ? "（已有 " + it.from_stock + "）" : "");
+    src = "";
+  } else if (e.kind === "craft") {
+    const per = Number(it.per_batch) || 1;
+    num = (stock ? "需制作 " : "理论需自制 ") + "<b>" + e.left + "</b>";
+    src = "来源：自制 · " +
+      (per === 1 ? "做 " + (it.craft_count || 0) + " 个"
+                 : "做 " + (it.craft_count || 0) + " 批（每批 " + per + "）") +
+      (it.surplus ? " · 多 " + it.surplus : "");
+  } else if (e.kind === "buy") {
+    num = (stock ? "需买 " : "理论需买 ") + "<b>" + e.left + "</b>";
+    src = "来源：购买" + stockBit;
+  } else {
+    num = (stock ? "还需获取 " : "理论需 ") + "<b>" + e.left + "</b>";
+    src = "来源：采集" + stockBit;
+  }
+  const npc = priceOn ? npcData[String(it.item_id)] : null;
+  const marketUnit = bi && Number(bi.filled) > 0 ? taxed(bi.cost) / Number(bi.filled) : null;
+  let priceBit = e.kind === "craft" ? "" :
+    bi ? " · 成本 " + money(bi.cost) + (Number(bi.short) ? " · 缺 " + bi.short : "")
+      : (un ? ' · <span class="noprice">无挂单</span>' : "");
+  if (npc && e.kind !== "craft") {
+    const cheaper = marketUnit != null && Number(npc.price) < marketUnit;
+    priceBit += " · NPC " + Number(npc.price).toLocaleString("en-US") +
+      (cheaper ? '<span class="npc-cheaper"> 更便宜</span>' : "");
+  }
+  const open = expanded.has(String(it.item_id));
+  return '<div class="item-entry' + (e.left === 0 ? " done" : "") + '">' +
+    '<button type="button" class="row-main" data-id="' + esc(it.item_id) + '">' +
+    iconFor(it.item_id) +
+    '<span class="nm" title="' + esc(it.name) + '">' + esc(it.name) + "</span>" +
+    '<span class="num">' + num + "</span>" +
+    '<span class="arrow" aria-hidden="true">' + (open ? "▾" : "▸") + "</span></button>" +
+    (src || priceBit ? '<div class="row-sub">' + (src ? esc(src) : "") + priceBit + "</div>" : "") +
+    (open ? detailsFor(e, stock) : "") + "</div>";
+}
+
+function baseGroupMeta(list) {
+  if (!priceOn || !buyData || !buyData.ok) return "";
+  let total = 0, priced = 0, short = 0;
+  list.forEach((e) => {
+    const bi = (buyData.items || []).find((x) => Number(x.item_id) === Number(e.it.item_id));
+    if (bi && Number(bi.filled) > 0) {
+      total += Number(bi.cost) || 0;
+      priced += 1;
+      if (Number(bi.short) > 0) short += 1;
+    }
+  });
+  if (!priced) return "暂无报价";
+  const txt = taxed(total).toLocaleString("en-US");
+  if (priced === list.length && !short) return "总价 " + txt + " 金";
+  return "已报价部分估算 " + txt + " 金（覆盖 " + priced + "/" + list.length + " 种" +
+    (short ? "，缺货 " + short + " 种" : "") + "）";
+}
+
+function renderRows() {
+  if (!lastData || !lastData.ok || !$("#rows")) return;
+  const g = groupData(lastData);
+  const all = g[activeTab] || [];
+  const q = filterText.trim().toLocaleLowerCase();
+  const hit = (e) => String(e.it.name).toLocaleLowerCase().includes(q);
+  let shown = q ? all.filter(hit) : all.slice();
+  const costOf = (e) => {
+    const pr = prices[String(e.it.item_id)];
+    return pr && pr.min_nq ? Number(pr.min_nq) * e.left : -1;
+  };
+  if (activeTab === "get" && priceOn && sortMode === "cost") {
+    shown.sort((a, b) => costOf(b) - costOf(a) || b.left - a.left);
+  } else if (activeTab !== "craft") {
+    shown.sort((a, b) => b.left - a.left);
+  }
+  $("#match").textContent = q ? "当前分类 " + shown.length + " / " + all.length + " 种" : "";
+  const others = q && !shown.length ? Object.keys(g).filter((k) => k !== activeTab)
+    .map((k) => [k, g[k].filter(hit).length]).filter(([, n]) => n > 0) : [];
+  $("#other").innerHTML = others.length
+    ? "其他分类：" + others.map(([k, n]) => '<button type="button" data-jump="' + k + '">' +
+      ({ get: "待获取", craft: "待制作", done: "已备齐" }[k]) + " " + n + "</button>").join("")
+    : "";
+  const hint = !q && activeTab === "craft"
+    ? '<div class="list-hint">制作顺序：从上往下做（先做深层的半成品，最后做成品）</div>' : "";
+  let body = "";
+  if (activeTab === "get") {
+    if (!q) baseSearchClosed = false;
+    const inter = shown.filter((e) => e.kind !== "base");
+    const base = shown.filter((e) => e.kind === "base");
+    const open = q ? !baseSearchClosed : baseOpen;
+    if (inter.length) {
+      body += '<div class="group-head"><span class="g-name">半成品 / 外购</span>' +
+        '<span class="g-meta">' + inter.length + " 种</span></div>";
+      body += inter.map((e) => rowEntry(e, !!lastData.stock)).join("");
+    }
+    if (base.length) {
+      const meta = baseGroupMeta(base);
+      body += '<button type="button" class="group-head base-toggle" data-toggle-base' +
+        ' aria-expanded="' + open + '">' +
+        '<span class="arrow" aria-hidden="true">' + (open ? "▾" : "▸") + "</span>" +
+        '<span class="g-name">基础材料</span>' +
+        '<span class="g-meta">' + base.length + " 种" + (meta ? " · " + meta : "") + "</span></button>";
+      if (open) body += base.map((e) => rowEntry(e, !!lastData.stock)).join("");
+    }
+    if (!shown.length) body = '<div class="empty">' + (q ? "没有匹配的材料。" : "这一组是空的。") + "</div>";
+  } else {
+    body = shown.length ? shown.map((e) => rowEntry(e, !!lastData.stock)).join("")
+      : '<div class="empty">' + (q ? "没有匹配的材料。" : "这一组是空的。") + "</div>";
+  }
+  $("#rows").innerHTML = hint + body;
+}
+
+function targetProgress(targets, stock) {
+  if (!targets.length) return "";
+  return '<div class="target-progress">' + targets.map((t) => {
+    const batches = Number(t.craft_count) || 0;
+    const per = Number(t.per_batch) || 1;
+    const craftBit = batches > 0
+      ? (per === 1 ? " · 做 " + batches + " 个" : " · 做 " + batches + " 批（每批 " + per + "）")
+      : "";
+    const need = Number(t.need) || Number(t.quantity) || 0;
+    const qty = Number(t.quantity) || 0;
+    const head = need !== qty ? "交付 " + qty + " · 总需 " + need : "需 " + qty;
+    let meta = stock
+      ? head + " · 现有 " + (t.from_stock || 0) + craftBit +
+        (t.surplus ? " · 多 " + t.surplus : "")
+      : head + craftBit;
+    if (stock && t.hq && Number(t.from_stock_nq) > 0) meta += " · 另有 " + t.from_stock_nq + " NQ 不参与";
+    return '<div class="t-row">' + iconFor(t.item_id) +
+      '<span class="t-name" title="' + esc(t.name) + '">' +
+      (t.hq ? '<span class="hq-badge">HQ</span>' : "") + esc(t.name) +
+      '</span><span class="t-meta">' + meta + "</span></div>";
+  }).join("") + "</div>";
+}
+
+function render(data) {
+  if (!data || !data.ok) return;
+  lastData = data;
+  const stock = !!data.stock;
+  const g = groupData(data);
+  const targetsOut = data.targets || [];
+  if (activeTab === "done" && !stock) activeTab = "get";
+  if (!stock && activeTab === "done") activeTab = "get";
+
+  let priceTotal = 0, priceKinds = 0, priceMissing = 0, priceShort = 0;
+  let priceTruncated = false, pricePartial = false, priceFailed = 0, freshText = "";
+  if (priceOn && buyData && buyData.ok) {
+    priceTotal = taxed(buyData.total);
+    priceKinds = buyData.coverage ? Number(buyData.coverage.priced) || 0 : 0;
+    priceMissing = Math.max(0, g.get.length - priceKinds);
+    priceShort = buyData.coverage ? Number(buyData.coverage.short_items) || 0 : 0;
+    priceTruncated = Number(buyData.coverage && buyData.coverage.listings_truncated) > 0;
+    pricePartial = buyData.status === "partial";
+    priceFailed = (buyData.failed_items || []).length;
+    freshText = buyData.freshness && buyData.freshness.newest_upload
+      ? String(buyData.freshness.newest_upload) : "";
+  }
+
+  const at = data._at ? new Date(data._at) : null;
+  const atText = at ? "按 " + String(at.getHours()).padStart(2, "0") + ":" + String(at.getMinutes()).padStart(2, "0") + " 计算" : "刚刚计算";
+
+  const priceMain = !priceOn ? ""
+    : (priceTotal ? (priceTruncated || pricePartial
+        ? "已报价部分估算 <b>" + priceTotal.toLocaleString("en-US") + " 金</b>"
+        : "买齐合计 <b>" + priceTotal.toLocaleString("en-US") + " 金</b>")
+                  : (pricePartial ? "报价失败" : "暂无价格"));
+  const priceMeta = priceKinds + "/" + g.get.length + " 种" +
+    (priceShort ? " · 缺货 " + priceShort + " 种" : "") + " · " + (priceLabel || priceRegion);
+
+  const title = '<div class="result-title"><span class="target"><b>' +
+    (targetsOut.length === 1 ? esc(targetsOut[0].name) + "<span>×" + targetsOut[0].quantity + "</span>"
+      : targetsOut.length + " 个成品") + "</b></span>" +
+    '<button type="button" id="copy"' + (dirty ? ' disabled title="先点生成总清单"' : "") + ">复制待办</button></div>";
+
+  const ovCell = (v, label) =>
+    '<div class="ov-cell"><b>' + v + "</b><span>" + label + "</span></div>";
+  const overview =
+    '<div class="ov-grid">' +
+    ovCell(targetsOut.length, "目标成品") +
+    ovCell(g.get.length, "待获取") +
+    ovCell(g.craft.length, "待制作") +
+    (stock ? ovCell(g.done.length, "已备齐") : ovCell(g.craft.length, "需制作")) +
+    (priceOn ? ovCell(priceKinds + "/" + g.get.length, priceTruncated ? "报价覆盖*" : "报价覆盖") : "") +
+    "</div>" +
+    '<div class="ov-meta">' +
+      "<span>" + atText + " · " + (lite ? "仅计算材料与价格" : stock ? "只读估算，未扣减库存" : "只读估算，理论需求") + "</span>" +
+      (priceOn ? "<span>" + priceMain + " · " + priceMeta + "</span>" : "") +
+      (priceOn && pricePartial ? "<span>部分报价失败" +
+        (priceFailed ? " " + priceFailed + " 项" : "") + "：只显示已拿到的价格</span>" : "") +
+      (priceOn && priceMissing ? "<span>" + priceMissing + " 种无价</span>" : "") +
+      (priceOn && freshText ? "<span>挂单更新 " + esc(freshText) + "</span>" : "") +
+      (priceOn && buyData && buyData.tax_note ? "<span>" + esc(buyData.tax_note) + "</span>" : "") +
+      (Object.keys(overrides).length ? "<span>来源已指定 " + Object.keys(overrides).length +
+        ' 项 <button type="button" id="clear-overrides">清除</button></span>' : "") +
+    "</div>";
+
+  const tabs = [["get", "待获取", g.get.length], ["craft", "待制作", g.craft.length]];
+  if (stock) tabs.push(["done", "已备齐", g.done.length]);
+  const tabHtml = '<div class="tabs" role="tablist" aria-label="清单分类">' + tabs.map(([key, label, n]) =>
+    '<button type="button" role="tab" id="tab-' + key + '" aria-controls="rows" aria-selected="' + (activeTab === key) +
+    '" tabindex="' + (activeTab === key ? "0" : "-1") +
+    '" data-tab="' + key + '" class="' + (activeTab === key ? "on" : "") + '">' + label + " " + n + "</button>").join("") + "</div>";
+
+  const filter = '<div class="filter-bar"><input id="filter" type="text" placeholder="搜索当前清单的材料名或 ID" aria-label="筛选当前清单">' +
+    '<select id="sort" aria-label="排序方式"' + (priceOn && activeTab !== "craft" ? "" : " hidden") + '><option value="qty">按数量</option><option value="cost">按金额</option></select>' +
+    '<span class="match" id="match" role="status"></span><span class="other" id="other"></span></div>' +
+    '<div class="list-hint" id="stale"' + (dirty ? "" : " hidden") + '>清单已修改 · 下面是上次结果，点「生成总清单」重新计算</div>';
+
+  $("#result").innerHTML = '<div class="result-head">' + title + overview + targetProgress(targetsOut, stock) + '</div>' +
+    tabHtml + filter + (stock ? "" : '<div class="list-hint">未使用库存：以下为理论需求。</div>') +
+    '<section id="rows" role="tabpanel" aria-labelledby="tab-' + activeTab + '" tabindex="0"></section>';
+  const sortEl = document.getElementById("sort");
+  if (sortEl) sortEl.value = sortMode;
+  const lbl = document.getElementById("result-label");
+  if (lbl) lbl.hidden = false;
+  $("#filter").value = filterText;
+  renderRows();
+}
+
+async function loadIcons(data) {
+  const ids = [...new Set([...(data.intermediate || []), ...(data.base || []), ...(data.targets || [])]
+    .map((x) => Number(x.item_id)).filter((x) => x > 0))];
+  const missing = ids.filter((id) => !icons[String(id)]);
+  if (!missing.length) { renderRows(); return; }
+  try {
+    for (let round = 0; round < 3; round++) {
+      const r = await getJSON("/api/icons?ids=" + missing.join(","));
+      const got = r.icons || {};
+      Object.assign(icons, got);
+      if (!Object.keys(got).length) break;
+      if (missing.every((id) => icons[String(id)])) break;
+      await new Promise((res) => setTimeout(res, 250));
+    }
+    if (lastData && lastData.ok) render(lastData);
+    renderTargets();
+  } catch (e) { /* ignore */ }
+}
+
+async function fetchNpc(ids) {
+  const all = {};
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    try {
+      const r = await getJSON("/api/npc/shop?ids=" + chunk.join(","));
+      if (r.ok && r.items) {
+        Object.assign(all, r.items);
+        if (r.version) npcVersion = r.version;
+      }
+    } catch (e) { /* NPC 失败不影响买齐 */ }
+  }
+  return all;
+}
+
+async function fetchBuyPlan(region, items) {
+  const merged = { ok: true, status: "ok", error: "", failed_items: [],
+    region: region, hq: false, items: [], unresolved: [],
+    total: 0, coverage: { items: 0, priced: 0, short_items: 0,
+      listings_truncated: 0, truncated_items: [] },
+    freshness: {}, cached: false };
+  for (let i = 0; i < items.length; i += 50) {
+    const chunk = items.slice(i, i + 50);
+    const r = await postJSON("/api/market/buy-plan", { region: region, hq: false, items: chunk });
+    if (!r.ok) return r;
+    if (r.status === "partial") {
+      merged.status = "partial";
+      merged.error = merged.error || r.error || "部分物品查询失败";
+      merged.failed_items.push(...(r.failed_items || []));
+    }
+    merged.items.push(...(r.items || []));
+    merged.unresolved.push(...(r.unresolved || []));
+    merged.total += Number(r.total) || 0;
+    const c = r.coverage || {};
+    merged.coverage.items += Number(c.items) || 0;
+    merged.coverage.priced += Number(c.priced) || 0;
+    merged.coverage.short_items += Number(c.short_items) || 0;
+    merged.coverage.listings_truncated += Number(c.listings_truncated) || 0;
+    merged.coverage.truncated_items.push(...(c.truncated_items || []));
+    if (r.freshness) {
+      const olds = [merged.freshness.oldest_upload, r.freshness.oldest_upload].filter(Boolean).sort();
+      const news = [merged.freshness.newest_upload, r.freshness.newest_upload].filter(Boolean).sort();
+      merged.freshness = { oldest_upload: olds[0] || "", newest_upload: news[news.length - 1] || "" };
+    }
+    if (r.cached) merged.cached = true;
+    if (!merged.tax_note && r.tax_note) merged.tax_note = r.tax_note;
+    if (!merged.price_kind && r.price_kind) merged.price_kind = r.price_kind;
+  }
+  return merged;
+}
+
+async function loadPrices() {
+  if (!lastData || !lastData.ok) return;
+  const g = groupData(lastData);
+  const items = g.get.map((e) => ({ item_id: e.it.item_id, quantity: e.left })).filter((x) => x.quantity > 0);
+  if (!items.length) { toast("没有需要买的材料"); return; }
+  const useRegion = priceScope === "world" && priceWorld ? priceWorld : priceRegion;
+  priceLabel = useRegion;
+  prices = {};   // 区域/需求可能已变，旧报价不能继续参与金额排序
+  try {
+    const [r, npc] = await Promise.all([
+      fetchBuyPlan(useRegion, items),
+      fetchNpc(items.map((x) => x.item_id)),
+    ]);
+    if (!r.ok) { showResultError("算买齐失败：" + (r.error || "未知错误"), loadPrices); return; }
+    hideResultError();
+    buyData = r;
+    npcData = npc;
+    prices = {};
+    (r.items || []).forEach((it) => {
+      const filled = Number(it.filled) || 0;
+      const need = Number(it.need) || 0;
+      const failed = (r.failed_items || []).indexOf(it.item_id) >= 0;
+      // 只有覆盖本次需求、且没有失败标记的报价才参与金额排序
+      if (!failed && need > 0 && filled >= need && !(Number(it.short) > 0)) {
+        prices[String(it.item_id)] = { min_nq: Number(it.avg_unit) || 0 };
+      }
+    });
+    render(lastData);
+    toast("已按 " + items.length + " 种材料的挂单算成本");
+  } catch (e) { showResultError("算买齐失败：" + e.message, loadPrices); }
+}
+
+async function copyList() {
+  if (!lastData || !lastData.ok) return;
+  if (dirty) { toast("先点生成总清单重新计算"); return; }
+  const g = groupData(lastData);
+  const lines = [];
+  if (g.get.length) {
+    lines.push("【待获取】");
+    g.get.forEach((e) => lines.push(e.it.name + " " + e.left));
+  }
+  if (g.craft.length) {
+    lines.push("【待制作】");
+    g.craft.forEach((e) => lines.push(e.it.name + " 需制作 " + e.left + (e.it.craft_count ? "（做 " + e.it.craft_count + " 批）" : "")));
+  }
+  if (!lines.length) { toast("没有待办可复制"); return; }
+  const text = lines.join("\n");
+  try { await navigator.clipboard.writeText(text); toast("已复制"); }
+  catch (e) {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); ta.remove(); toast("已复制");
+  }
+}
+
+async function run() {
+  if (!targets.length) { toast("先添加成品"); return; }
+  const stock = lite ? false : $("#stock").checked;
+  const seq = ++requestSeq;
+  const btn = $("#go"); btn.disabled = true; btn.textContent = "生成中…";
+  const copyBtn = document.getElementById("copy"); if (copyBtn) copyBtn.disabled = true;
+  $("#result").classList.add("loading");
+  try {
+    const data = await postJSON("/api/recipe/expand", {
+      targets: targets.map((t) => ({ item_id: t.item_id, quantity: t.quantity, hq: !!t.hq && t.can_hq !== false })),
+      stock: stock, target_stock: targetStock, overrides: overrides, with_alternatives: false,
+    });
+    if (seq !== requestSeq) return;
+    if (!data.ok) { showResultError("生成失败：" + (data.error || "未知错误"), run); return; }
+    hideResultError();
+    data.stock = stock; data._at = Date.now(); dirty = false;
+    render(data);
+    loadIcons(data);
+    if (priceOn) await loadPrices();
+  } catch (e) {
+    showResultError("生成失败：" + e.message, run);
+  } finally {
+    if (seq === requestSeq) {
+      btn.disabled = false; btn.textContent = "生成总清单";
+      $("#result").classList.remove("loading");
+    }
+  }
+}
+
+/* ---------------- 价格控件 ---------------- */
+
+function compareRegion() {
+  return priceScope === "world" && priceWorld ? priceWorld : priceRegion;
+}
+function compareKey(id, qty) {
+  return compareRegion() + ":" + id + ":" + qty;
+}
+function quoteComplete(r) {
+  return !!r && r.ok && r.status !== "partial" &&
+    !(r.unresolved || []).length &&
+    !(r.coverage && Number(r.coverage.short_items) > 0);
+}
+
+async function runCompare(itemId, qty) {
+  const region = compareRegion();
+  const key = compareKey(itemId, qty);
+  compareCache[key] = { loading: true };
+  renderRows();
+  try {
+    const [buy, exp] = await Promise.all([
+      postJSON("/api/market/buy-plan", { region: region, hq: false, items: [{ item_id: itemId, quantity: qty }] }),
+      postJSON("/api/recipe/expand", { targets: [{ item_id: itemId, quantity: qty }], stock: false, overrides: {}, with_alternatives: false }),
+    ]);
+    let craftCost = 0, craftOk = false, craftComplete = false;
+    if (exp.ok) {
+      const mats = (exp.base || []).map((b) => ({ item_id: b.item_id, quantity: b.need })).filter((x) => x.quantity > 0);
+      const expComplete = !(exp.unresolvable_items || []).length;
+      if (!mats.length) { craftCost = 0; craftOk = true; craftComplete = expComplete; }
+      else {
+        const bp = await postJSON("/api/market/buy-plan", { region: region, hq: false, items: mats });
+        if (bp.ok) { craftCost = Number(bp.total) || 0; craftOk = true; craftComplete = expComplete && quoteComplete(bp); }
+      }
+    }
+    const buyComplete = quoteComplete(buy);
+    const bi = buy.ok ? (buy.items || [])[0] : null;
+    compareCache[key] = {
+      loading: false,
+      incomplete: !(buyComplete && craftComplete),
+      buyCost: buyComplete && bi ? Number(bi.cost) || 0 : null,
+      craftCost: craftOk && craftComplete ? craftCost : null,
+    };
+  } catch (e) {
+    compareCache[key] = { loading: false, error: e.message };
+  }
+  renderRows();
+}
+
+async function loadWorlds() {
+  priceRegion = $("#region").value;
+  try {
+    const r = await getJSON("/api/market/worlds?dc=" + encodeURIComponent(priceRegion));
+    const list = (r.ok && r.worlds) || [];
+    const sel = $("#world");
+    sel.innerHTML = list.map((w) => "<option>" + esc(w) + "</option>").join("");
+    priceWorld = list.includes(priceWorld) ? priceWorld : (list[0] || "");
+    sel.value = priceWorld;
+  } catch (e) { /* ignore */ }
+}
+
+$("#price").addEventListener("change", () => {
+  priceOn = $("#price").checked;
+  const bar = document.getElementById("price-bar"); if (bar) bar.hidden = !priceOn;
+  const sortSel = document.getElementById("sort"); if (sortSel) sortSel.hidden = !priceOn;
+  if (priceOn) { if (lastData && lastData.ok) loadPrices(); }
+  else { prices = {}; buyData = null; npcData = {}; if (lastData) render(lastData); }
+});
+$("#region").addEventListener("change", async () => { await loadWorlds(); if (priceOn && lastData) loadPrices(); });
+$("#scope").addEventListener("change", () => {
+  priceScope = $("#scope").value;
+  $("#world").hidden = priceScope !== "world";
+  if (priceOn && lastData) loadPrices();
+});
+$("#world").addEventListener("change", () => { priceWorld = $("#world").value; if (priceOn && lastData) loadPrices(); });
+
+/* ---------------- 结果内事件 ---------------- */
+
+$("#result").addEventListener("click", (e) => {
+  const tab = e.target.closest("[data-tab]");
+  if (tab) { activeTab = tab.dataset.tab; render(lastData); return; }
+  const jump = e.target.closest("[data-jump]");
+  if (jump) { activeTab = jump.dataset.jump; render(lastData); return; }
+  if (e.target.closest("[data-toggle-base]")) {
+    if (filterText.trim()) baseSearchClosed = !baseSearchClosed;
+    else { baseOpen = !baseOpen; saveBaseOpen(); }
+    renderRows();
+    return;
+  }
+  if (e.target.closest("#copy")) { copyList(); return; }
+  const cmp = e.target.closest("[data-compare]");
+  if (cmp) {
+    runCompare(Number(cmp.dataset.compare), Number(cmp.dataset.qty));
+    return;
+  }
+  const src = e.target.closest("[data-src]");
+  if (src) {
+    overrides[src.dataset.src] = src.dataset.next;
+    saveOverrides();
+    run();
+    return;
+  }
+  if (e.target.closest("#clear-overrides")) {
+    overrides = {};
+    saveOverrides();
+    run();
+    return;
+  }
+  const row = e.target.closest("[data-id]");
+  if (row) {
+    const id = row.dataset.id;
+    if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+    renderRows();
+    return;
+  }
+});
+
+$("#result").addEventListener("keydown", (e) => {
+  const tab = e.target.closest("[role=tab]");
+  if (!tab) return;
+  const keys = [...document.querySelectorAll(".tabs [role=tab]")];
+  if (!keys.length) return;
+  const i = keys.indexOf(tab);
+  let next = null;
+  if (e.key === "ArrowRight") next = keys[(i + 1) % keys.length];
+  else if (e.key === "ArrowLeft") next = keys[(i - 1 + keys.length) % keys.length];
+  else if (e.key === "Home") next = keys[0];
+  else if (e.key === "End") next = keys[keys.length - 1];
+  if (!next) return;
+  e.preventDefault();
+  activeTab = next.dataset.tab;
+  render(lastData);
+  requestAnimationFrame(() => { const el = document.getElementById("tab-" + activeTab); if (el) el.focus(); });
+});
+
+$("#result").addEventListener("input", (e) => {
+  if (e.target.id !== "filter") return;
+  filterText = e.target.value; renderRows();
+});
+$("#result").addEventListener("change", (e) => {
+  if (e.target.id !== "sort") return;
+  sortMode = e.target.value; renderRows();
+});
+
+$("#clear-all").addEventListener("click", () => {
+  if (!targets.length) return;
+  endDrag();
+  resetRowDelete();   // 两个删除确认不叠加
+  if (!clearArmed) {
+    clearArmed = true;
+    const btn = $("#clear-all");
+    btn.classList.add("armed");
+    btn.textContent = "再点一次，删除全部 " + targets.length + " 项";
+    clearTimer = setTimeout(() => { clearTimer = null; resetClearAll(); }, ROW_DELAY_MS);
+    announce("再次点击将删除全部 " + targets.length + " 项，5 秒内有效，按 Esc 取消");
+    return;
+  }
+  const count = targets.length;
+  saveDeletedSnapshot(count);
+  resetRowDelete();
+  targets = [];
+  resetClearAll();
+  saveTargets();
+  renderTargets();
+  markDirty();
+  showUndoDelete(count);
+  announce("已删除 " + count + " 项，可撤销");
+});
+
+$("#undo-delete-btn").addEventListener("click", () => {
+  if (!lastDeleted) return;
+  targets = (lastDeleted.targets || []).filter((t) => t && Number(t.item_id) > 0)
+    .map((t) => ({ item_id: Number(t.item_id), name: String(t.name || ""), quantity: parsePositiveInt(t.quantity),
+      hq: !!t.hq, can_hq: !(t.can_hq === false || t.can_hq === 0) }))
+    .filter((t) => t.quantity > 0);
+  overrides = lastDeleted.overrides && typeof lastDeleted.overrides === "object" ? lastDeleted.overrides : {};
+  lastDeleted = null;
+  resetRowDelete();
+  try {
+    const arr = JSON.parse(localStorage.getItem(DELETED_KEY) || "[]");
+    arr.shift();
+    localStorage.setItem(DELETED_KEY, JSON.stringify(arr));
+  } catch (e) { /* ignore */ }
+  $("#undo-delete").hidden = true;
+  saveTargets(); saveOverrides(); renderTargets(); loadTargetIcons();
+  markDirty();
+  toast("已撤销删除");
+});
+
+$("#target-stock").addEventListener("change", () => {
+  targetStock = $("#target-stock").checked;
+  try { localStorage.setItem(TARGET_STOCK_KEY, targetStock ? "1" : "0"); } catch (e) { /* ignore */ }
+  $("#ts-hint").hidden = targetStock || !$("#stock").checked;
+  if (targets.length && lastData) run(); else markDirty();
+});
+$("#stock").addEventListener("change", () => {
+  const on = $("#stock").checked;
+  const el = document.getElementById("target-stock");
+  if (el) { el.disabled = !on; el.closest(".ts-wrap").style.opacity = on ? "1" : ".5"; }
+  $("#ts-hint").hidden = targetStock || !on;
+  markDirty();
+});
+$("#hq-all").addEventListener("change", () => {
+  const on = $("#hq-all").checked;
+  hqEligible().forEach((t) => { t.hq = on; });
+  saveTargets(); renderTargets(); markDirty();
+});
+$("#save-list").addEventListener("click", saveList);
+$("#load-list").addEventListener("click", loadList);
+$("#del-list").addEventListener("click", deleteList);
+$("#saved-lists").addEventListener("change", resetDeleteList);
+$("#export-list").addEventListener("click", exportList);
+$("#import-list").addEventListener("change", (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (f) importList(f);
+  e.target.value = "";
+});
+$("#tax").addEventListener("change", () => {
+  taxOn = $("#tax").checked;
+  if (lastData) render(lastData);
+});
+$("#go").addEventListener("click", run);
+
+/* ---------------- 启动 ---------------- */
+
+async function loadMeta() {
+  try {
+    const m = await getJSON("/api/recipe/meta");
+    $("#meta").textContent = m.ok && m.recipes
+      ? "配方数据 " + (m.version || "?") + " · " + m.recipes + " 条 / " + m.items + " 种成品"
+      : "配方数据未就绪：先重建配方";
+  } catch (e) { $("#meta").textContent = "配方接口读不到：" + e.message; }
+}
+
+async function loadMode() {
+  try {
+    const s = await getJSON("/api/state");
+    csrfToken = s.csrf_token || csrfToken;
+    lite = Number(s.stock_rows) === 0;
+  } catch (e) { lite = false; }
+  if (lite) {
+    $("#stock").checked = false;
+    $("#stock").disabled = true;
+    const txt = document.getElementById("stock-text");
+    if (txt) txt.textContent = "算料模式（不查库存）";
+  }
+  const ts = document.getElementById("target-stock");
+  if (ts) {
+    ts.disabled = !$("#stock").checked;
+    ts.closest(".ts-wrap").style.opacity = ts.disabled ? ".5" : "1";
+  }
+}
+
+function loadSaved() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SAVED_KEY) || "[]");
+    savedLists = Array.isArray(raw) ? raw.filter((x) => x && Array.isArray(x.targets)) : [];
+  } catch (e) { savedLists = []; }
+}
+
+function saveSaved() {
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify(savedLists)); } catch (e) { /* ignore */ }
+}
+
+function renderSaved() {
+  const sel = $("#saved-lists");
+  if (!sel) return;
+  sel.innerHTML = savedLists.length
+    ? savedLists.map((x) => '<option value="' + esc(x.name) + '">' + esc(x.name) + "</option>").join("")
+    : '<option value="">（还没有保存的清单）</option>';
+}
+
+function snapshotList(name) {
+  return {
+    name: name,
+    savedAt: Date.now(),
+    targets: targets.map((t) => ({ item_id: t.item_id, name: t.name, quantity: t.quantity, hq: !!t.hq, can_hq: t.can_hq !== false })),
+    overrides: overrides,
+    stockOn: !lite && !!document.querySelector("#stock") && document.querySelector("#stock").checked,
+    priceOn: priceOn,
+  };
+}
+
+function saveList() {
+  if (!targets.length) { toast("清单是空的"); return; }
+  const name = ($("#save-name").value || "").trim() ||
+    ("清单 " + new Date().toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }));
+  const snap = snapshotList(name);
+  const i = savedLists.findIndex((x) => x.name === name);
+  if (i >= 0) savedLists[i] = snap; else savedLists.push(snap);
+  saveSaved(); renderSaved(); $("#saved-lists").value = name;
+  resetDeleteList();
+  toast("已保存：" + name);
+}
+
+function loadList() {
+  const name = $("#saved-lists").value;
+  const snap = savedLists.find((x) => x.name === name);
+  if (!snap) { toast("没有这个清单"); return; }
+  endDrag();
+  hideUndoDelete();
+  resetRowDelete();
+  resetDeleteList();
+  targets = (snap.targets || []).filter((t) => t && Number(t.item_id) > 0)
+    .map((t) => ({ item_id: Number(t.item_id), name: String(t.name || ""), quantity: parsePositiveInt(t.quantity),
+      hq: !!t.hq, can_hq: !(t.can_hq === false || t.can_hq === 0) }))
+    .filter((t) => t.quantity > 0);
+  overrides = snap.overrides && typeof snap.overrides === "object" ? snap.overrides : {};
+  const txt = document.getElementById("stock-text");
+  if (!lite && txt) {
+    txt.textContent = "使用库存";
+    const st = document.getElementById("stock");
+    if (st) st.checked = !!snap.stockOn;
+  }
+  priceOn = !!snap.priceOn;
+  const priceBox = document.getElementById("price");
+  if (priceBox) priceBox.checked = priceOn;
+  const bar = document.getElementById("price-bar");
+  if (bar) bar.hidden = !priceOn;
+  saveTargets(); saveOverrides(); renderTargets(); loadTargetIcons();
+  dirty = true;
+  run();
+  toast("已载入：" + name);
+}
+
+function deleteList() {
+  const name = $("#saved-lists").value;
+  if (!name) return;
+  const btn = document.getElementById("del-list");
+  if (delListArmed !== name) {
+    resetDeleteList();
+    delListArmed = name;
+    if (btn) {
+      btn.classList.add("armed");
+      btn.textContent = "确认删";
+      btn.setAttribute("title", "再点一次删除清单「" + name + "」");
+      btn.setAttribute("aria-label", "确认删除清单 " + name);
+    }
+    toast("再点一次确认删除清单「" + name + "」，5 秒内有效");
+    delListTimer = setTimeout(() => { delListTimer = null; resetDeleteList(); }, ROW_DELAY_MS);
+    return;
+  }
+  resetDeleteList();
+  savedLists = savedLists.filter((x) => x.name !== name);
+  saveSaved(); renderSaved();
+  toast("已删除：" + name);
+}
+
+function exportList() {
+  if (!targets.length) { toast("清单是空的"); return; }
+  const name = ($("#save-name").value || "").trim() || "清单";
+  const blob = new Blob([JSON.stringify(snapshotList(name), null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name.replace(/[\\/:*?"<>|]/g, "_") + ".json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function importList(file) {
+  try {
+    const text = await file.text();
+    const raw = JSON.parse(text);
+    const items = raw && Array.isArray(raw.targets) ? raw.targets : (Array.isArray(raw) ? raw : []);
+    let ok = 0, skipped = 0;
+    items.forEach((t) => {
+      const id = Number(t.item_id), qty = parsePositiveInt(t.quantity);
+      if (id > 0 && qty && addTarget(id, String(t.name || ("#"+id)), qty)) { ok++; }
+      else skipped++;
+    });
+    toast("已导入 " + ok + " 项" + (skipped ? "，跳过 " + skipped + " 项（数量无效）" : ""));
+    loadTargetIcons();
+  } catch (e) { showResultError("导入失败：" + e.message, null); }
+}
+
+loadTargets();
+loadOverrides();
+loadTargetStock();
+loadDeletedSnapshot();
+loadBaseOpen();
+loadSaved();
+renderSaved();
+resetDeleteList();
+renderTargets();
+loadTargetIcons();
+loadMode().then(() => {
+  loadMeta();
+  loadWorlds();
+  if (targets.length) run();
+});
+
+document.querySelectorAll("[data-copy-group]").forEach((b) => {
+  b.addEventListener("click", async () => {
+    const v = b.dataset.copyGroup;
+    try { await navigator.clipboard.writeText(v); toast("群号已复制：" + v); }
+    catch (e) { toast("群号：" + v); }
+  });
+});
+</script>
+<script src="heartbeat.js"></script>
+<script src="hotkeys.js"></script>
+</body>
+</html>

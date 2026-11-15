@@ -1,0 +1,51 @@
+# 用户数据：任何情况下都不进仓库（可能含真实账号/角色名）
+data/
+data-bak/
+data-backup-*/
+emergency-stock-*/
+*.db
+*.db-wal
+*.db-shm
+*.lock
+
+# 打包产物：发到 GitHub Releases，不提交
+build/
+dist/
+release/
+teamlogo/
+*.zip
+*.exe
+
+# 运行与调试残留
+__pycache__/
+*.pyc
+*.log
+rt*_out.txt
+rt*_err.txt
+
+# 开发笔记与参考资料：确认内容后再决定是否公开
+交接文档/
+接手资料/
+外部参考资料-*/
+宣传长图/
+整理交接文档.bat
+生成接手包.bat
+tools/archive_docs.py
+tools/make_handover.py
+
+# logo 只留成品图标，设计稿和参考图不传
+logo/*
+!logo/png/
+!logo/*.svg
+!logo/*.ico
+!logo/README.md
+
+# 编辑器与系统文件
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# 本地环境变量
+.env
+.env.*

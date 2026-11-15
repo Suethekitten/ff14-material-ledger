@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" role="img" aria-label="FF14 材料台账">
+  <title>FF14 材料台账</title>
+  <rect x="11.2" y="1.6" width="3.4" height="12.8" rx="1.4" fill="#F1E8D5"/>
+  <rect x="1" y="1" width="12" height="14" rx="2.6" fill="#35485A"/>
+  <rect x="2.6" y="1" width="1.7" height="14" fill="#C5A46C"/>
+  <path d="M5.4 11.4 L10.1 5.3" stroke="#C5A46C" stroke-width="2" stroke-linecap="round" fill="none"/>
+</svg>

@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+# Windows 批处理保留 CRLF：cmd 解析纯 LF 的 .bat 在个别情况下会出错
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.zip  binary
+*.db   binary

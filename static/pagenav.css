@@ -1,0 +1,101 @@
+/* 页面切换导航：库存 / 算料清单 */
+.pagenav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 12px;
+  vertical-align: middle;
+}
+.pagenav a {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--muted, #5b6675);
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.pagenav a:hover {
+  background: var(--accent-soft, #e9f3f5);
+  color: var(--accent, #2f7d8e);
+}
+.pagenav a.on {
+  background: var(--accent-soft, #e9f3f5);
+  border-color: color-mix(in srgb, var(--accent, #2f7d8e) 28%, transparent);
+  color: var(--accent, #2f7d8e);
+  font-weight: 600;
+}
+.pagenav kbd {
+  font: inherit;
+  font-size: 11px;
+  opacity: .65;
+  margin-left: 5px;
+}
+@media (max-width: 700px) {
+  header {
+    flex-wrap: wrap;
+  }
+  .pagenav {
+    order: 20;
+    flex: 1 1 100%;
+    margin: 8px 0 0;
+  }
+  .pagenav a {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+  .pagenav .hk-open {
+    flex: 0 0 30px;
+  }
+}
+
+.hk-open {
+  border: 0; background: transparent; color: var(--muted, #5b6675);
+  width: 30px; height: 30px; border-radius: 999px; cursor: pointer;
+  font-size: 15px; line-height: 1; flex: 0 0 30px;
+}
+.hk-open:hover { background: var(--accent-soft, #e9f3f5); color: var(--accent, #2f7d8e); }
+.hk-panel {
+  position: fixed;
+  z-index: 80;
+  width: 320px;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--panel, #fff);
+  border: 1px solid var(--line, #e3e8ee);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .14);
+}
+.hk-title { font-size: 13px; font-weight: 650; margin-bottom: 8px; color: var(--muted, #5b6675); }
+.hk-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; }
+.hk-name { color: var(--text, #26303b); }
+.hk-combo {
+  height: 30px; min-width: 112px; padding: 0 10px; border: 1px solid var(--line, #e3e8ee);
+  border-radius: 999px; background: #f7f9fb; color: var(--accent, #2f7d8e);
+  font: inherit; font-size: 12px; cursor: pointer; text-align: center;
+}
+.hk-combo:hover { border-color: var(--accent, #2f7d8e); }
+.hk-combo.recording { border-color: #d14b4b; color: #d14b4b; background: #fff5f5; }
+.hk-record {
+  height: 28px; padding: 0 10px; border: 1px solid var(--line, #e3e8ee);
+  border-radius: 8px; background: #fff; color: var(--text, #26303b); font: inherit;
+  font-size: 12px; cursor: pointer;
+}
+.hk-record:hover { border-color: var(--accent, #2f7d8e); color: var(--accent, #2f7d8e); }
+.hk-tip { font-size: 11px; color: var(--muted, #8a94a3); margin-top: 8px; line-height: 1.5; }
+.hk-actions { margin-top: 8px; }
+.hk-actions button {
+  height: 28px; font-size: 12px; padding: 0 10px; border: 1px solid var(--line, #e3e8ee);
+  border-radius: 8px; background: #fff; color: var(--text, #26303b); cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .hk-panel {
+    left: 12px !important;
+    right: 12px;
+    width: auto;
+  }
+}

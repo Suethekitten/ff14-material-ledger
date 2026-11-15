@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="FF14 材料台账">
+  <title>FF14 材料台账</title>
+  <defs>
+    <clipPath id="cover">
+      <rect x="84" y="56" width="320" height="400" rx="30"/>
+    </clipPath>
+  </defs>
+
+  <!-- 后封面 -->
+  <rect x="100" y="66" width="326" height="390" rx="28" fill="#16202A"/>
+  <!-- 页边（羊皮纸） -->
+  <rect x="104" y="70" width="320" height="382" rx="24" fill="#F1E8D5"/>
+  <!-- 前封面（深蓝皮革） -->
+  <rect x="84" y="56" width="320" height="400" rx="30" fill="#202C38"/>
+  <!-- 金书脊 -->
+  <g clip-path="url(#cover)">
+    <rect x="112" y="56" width="22" height="400" fill="#C5A46C"/>
+  </g>
+
+  <!-- 羽毛笔 -->
+  <g transform="translate(298 318) rotate(42) scale(0.7)">
+    <path d="M0 -168
+             C10 -162 19 -152 25 -139 L14 -133
+             C22 -124 30 -113 35 -100 L22 -95
+             C30 -85 37 -72 39 -58 L26 -53
+             C33 -42 36 -27 36 -12
+             C36 26 25 66 8 96 L0 108
+             L-8 96
+             C-25 66 -36 26 -36 -12
+             C-36 -27 -33 -42 -26 -53 L-39 -58
+             C-37 -72 -30 -85 -22 -95 L-35 -100
+             C-30 -113 -22 -124 -14 -133 L-25 -139
+             C-19 -152 -10 -162 0 -168 Z"
+          fill="#C5A46C"/>
+    <rect x="-3" y="-166" width="6" height="292" rx="3" fill="#A8874F"/>
+    <path d="M0 126 L6 110 L-6 110 Z" fill="#A8874F"/>
+  </g>
+</svg>
