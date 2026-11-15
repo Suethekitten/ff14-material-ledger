@@ -290,7 +290,7 @@ python app.py --clear-demo    # 删除示例数据
 
 本项目是玩家独立开发的**非官方工具**，与 Square Enix 无关联。FINAL FANTASY 是 Square Enix 的注册商标，游戏内物品名、图标等数据的版权归 Square Enix 所有。
 
-- 物品、配方、NPC 商店数据来自 [thewakingsands/ff14-datamining-cn](https://github.com/thewakingsands/ff14-datamining-cn)，不随仓库分发
+- 物品、配方、NPC 商店数据来自 [thewakingsands/ffxiv-datamining-cn](https://github.com/thewakingsands/ffxiv-datamining-cn)，不随仓库分发
 - 市场价来自 [Universalis](https://universalis.app/)，物品图标来自 [XIVAPI](https://xivapi.com/)
 - 所有库存数据只保存在你自己电脑的 `data\` 目录里，不会上传到任何服务器；联网只用于下载上面这些公开数据
 
