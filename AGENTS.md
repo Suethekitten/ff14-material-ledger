@@ -16,7 +16,6 @@
 | 根目录所有 `.bat`（启动、恢复、导出、诊断、清空账本等） | 后端 |
 | 打包和发布：`pack.py`、`pack.bat`、`pack_release.py`、`build_exe.bat`、`ff14-stock.spec`、`发布打包.bat` | 后端 |
 | `version.json`（只经 `tools/sync_version.py` 同步） | 后端 |
-| `采用新界面.py`、`采用新界面.bat`（脚本本身归后端；运行它会覆盖 `static/index.html`，由维护者决定何时运行） | 后端 |
 | `docs/API.md` | 后端写，前端只读；前端发现不一致时提给维护者 |
 | `static/` | 前端 |
 | `CHANGELOG.md` | 双方都可在当前版本那一节追加自己的条目，不改对方写的 |
