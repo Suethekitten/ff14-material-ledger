@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sqlite3
@@ -791,6 +792,15 @@ class CoreDataTest(unittest.TestCase):
         port = httpd.server_address[1]
         threading.Thread(target=httpd.serve_forever, daemon=True).start()
         try:
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+            conn.request("GET", "/api/state")
+            resp = conn.getresponse()
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertTrue(data["ok"])
+            self.assertIs(data["local"], True)
+            conn.close()
+
             conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
             conn.request("GET", "/api/state", headers={"Host": "evil.example"})
             resp = conn.getresponse()

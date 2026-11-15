@@ -5645,7 +5645,7 @@ class Handler(BaseHTTPRequestHandler):
             return (qs.get(key) or [""])[0]
 
         if route == "/api/state":
-            self._json({"ok": True, **state()})
+            self._json({"ok": True, **state(), "local": self._is_local_client()})
             return
         if route == "/api/characters":
             self._json({"ok": True, "characters": list_characters()})

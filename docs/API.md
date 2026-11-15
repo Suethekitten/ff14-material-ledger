@@ -42,23 +42,80 @@
 
 | 接口 | 参数 | 返回要点 | 备注 |
 |---|---|---|---|
-| `/api/state` | — | `csrf_token` 及页面初始化所需状态（待补） | 页面加载时先调 |
+| `/api/state` | — | 页面初始化状态；完整字段见下方「`/api/state` 返回字段」 | 页面加载时先调 |
 | `/api/characters` | — | `characters: [...]` | |
 | `/api/diag` | — | 物品表条数、名称解析样例、图标缓存数 | 排查用 |
 | `/api/lan` | — | `enabled`、`addresses`、`listening`、`port` | **本机** |
 | `/api/data-dir` | — | `dir`、`db`、`db_exists`、`db_size`、`sidecars` | **本机** |
 
+#### `/api/state` 返回字段
+
+| 字段 | 类型 / 说明 |
+|---|---|
+| `ok` | `true` |
+| `local` | `bool`：请求来自本机为 `true`。**只给前端隐藏按钮用**，服务端权限仍以 `LOCAL_ONLY_GET/POST` 为准 |
+| `version` | 当前版本号 |
+| `csrf_token` | 写请求要带的 `X-CSRF-Token`；每次启动重新生成 |
+| `character_count` | 角色数 |
+| `stock_rows` | 正常库存行数（不含未确认） |
+| `total_qty` | 正常库存总数量 |
+| `has_demo` | 是否有示例数据 |
+| `items_loaded` | 已加载物品数 |
+| `items_error` | 物品表错误（无为空串） |
+| `items_file` | 物品表路径 |
+| `stale_days` | 超过多少天标黄 |
+| `locations` | 默认位置列表 |
+| `data_dir` | 数据目录路径 |
+| `db_size` | 数据库文件字节数 |
+| `snapshot_count` | 快照数量 |
+| `recovered_hint` | 启动时库不存在但手上有快照 |
+| `db_created_new` | 本次启动新建了空库 |
+| `retainer_max` | `{character_id: 最大雇员编号}`，用于生成雇员下拉 |
+| `pending_rows` | 未确认库存行数 |
+| `pending_qty` | 未确认库存总数量 |
+
 ### 库存与搜索
 
 | 接口 | 参数 | 返回要点 |
 |---|---|---|
-| `/api/search` | `q`、`account`、`character`、`location`、`hq`、`limit_items`（整数） | 搜索结果（待补） |
+| `/api/search` | `q`、`account`、`character`、`location`、`hq`、`limit_items`（整数，0 用默认 40，最大 200） | 分层搜索结果；完整字段见下方「`/api/search` 返回字段」 |
 | `/api/stock/lookup` | `character_id`、`location`（缺省「背包」）、`item_name`、`hq` | 这一格现有数量（待补） |
 | `/api/stock/export` | — | 导出用的 CSV 数据（待补） |
 | `/api/stock/safety-lines` | — | 安全线列表（待补） |
 | `/api/pending` | — | 未确认库存（待补） |
 | `/api/unmapped` | — | `items`：未收录的材料 |
 | `/api/reconcile` | — | `checked`、`issues[]`；每条含 `type`（`ledger_only` 只有流水没有库存 / `stock_only` 只有库存没有流水 / `qty_diff` 两边都有但数量不一致）、`character`、`world`、`item_name`、`item_id`、`location`、`hq_any`、`stock_qty`、`ledger_qty`、`diff` |
+
+#### `/api/search` 返回字段
+
+| 字段 | 说明 |
+|---|---|
+| `ok` | `true` |
+| `query` | 原搜索词 |
+| `total_rows` | 命中库存行数（截断前） |
+| `total_items` | 命中材料种数（截断前） |
+| `truncated` | 材料种数是否被 `limit_items` 截断 |
+| `items[]` | 材料，按匹配度、总量排序 |
+| `characters[]` | 角色维度命中：`id`、`name`、`world`、`account`、`kinds`（材料种数）、`total`（总数量） |
+| `suggestions[]` | 无库存时的联想：`id`、`name`、`icon`、`score`、`stack`、`can_be_hq`、`matched_alias`、`aliases[]` |
+| `hint` | 空结果原因：`no_stock`（物品库有、库存没有）/ `no_item`（物品库也没有）/ 空串 |
+| `stats` | 同 `/api/state` 的完整字段（**不含 `local`**） |
+
+`items[]` 每项：
+
+| 字段 | 说明 |
+|---|---|
+| `name`、`item_id`、`icon`、`stack`、`hq` | 材料基本信息；`hq` 为 0/1 |
+| `total` | 该材料总量 |
+| `holders[]` | 持有行，按数量降序 |
+| `aliases` | 备注名，最多 4 个 |
+| `purchase_count` | 采购批次数 |
+| `avg_cost` | 加权均价 |
+| `spent` | `total × avg_cost`，四舍五入 2 位 |
+| `match_score` | 匹配分；无搜索词为 0，仅靠角色/位置命中为 300 |
+| `matched_alias` | 命中的备注名，没有为空串 |
+
+`holders[]` 每项：`stock_id`、`character_id`、`character`、`account`、`world`、`location`、`qty`、`hq`、`age_days`、`age_text`、`stale`。
 
 ### 物品与名字
 
@@ -210,3 +267,4 @@
 |---|---|---|
 | 2026-11-15 | 0.12.3 | 初稿，从 `app.py` 路由整理 |
 | 2026-11-15 | 0.12.3 | 补齐前端在用字段：买齐报价状态/覆盖/新鲜度、导入歧义、撤销 `code`、恢复四字段与 `stage`、对账 `type`、成本总览字段、配方 `invalid`/`unresolvable_items`、`/api/exit` 标本机 |
+| 2026-11-15 | 0.12.3 | `/api/state` 新增 `local`（仅用于前端隐藏本机按钮），补全 `/api/state`、`/api/search` 返回字段 |
