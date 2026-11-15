@@ -269,6 +269,8 @@ python app.py --clear-demo    # 删除示例数据
 
 ## 开发
 
+目前只有 [Suethekitten](https://github.com/Suethekitten) 一人维护，暂不接受代码合并请求。问题和建议欢迎提 Issue。
+
 - **跑测试**：测试会写数据，先把数据目录指到一个临时文件夹：
 
   ```powershell
