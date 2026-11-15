@@ -518,6 +518,8 @@
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
   }
+  /* 非本机访问：隐藏 docs/API.md 标「本机」的入口 */
+  body.not-local [data-local-only] { display: none !important; }
   .exit-btn {
     position: fixed; right: 14px; bottom: 84px; z-index: 55;
     padding: 10px 16px; border-radius: 12px; border: 0;
@@ -1033,9 +1035,9 @@
   </div>
 
   <footer>
-    <div id="foot-path">数据目录：读取中…</div>
+    <div id="foot-path" data-local-only>数据目录：读取中…</div>
     <div style="margin-top:6px">
-      <button class="ghost" id="foot-open-dir">打开数据目录</button>
+      <button class="ghost" id="foot-open-dir" data-local-only>打开数据目录</button>
       <span class="muted" style="font-size:12px;margin-left:8px">断网可用 · 审计 / 快照 / 对账 / 映射 / 部队在右上角「管理」</span>
     </div>
     <div style="margin-top:6px;font-size:12px;color:var(--muted)">
@@ -1118,7 +1120,7 @@
         <input id="snap-note" type="text" placeholder="手动快照备注（可空）" style="flex:1;min-width:160px" />
         <button class="ghost" id="snap-create">立即打快照</button>
         <button class="ghost" id="snap-refresh">刷新</button>
-        <button class="ghost" id="snap-cleanup" style="display:none">清理旧快照</button>
+        <button class="ghost" id="snap-cleanup" style="display:none" data-local-only>清理旧快照</button>
       </div>
       <div id="snap-list"></div>
       <div id="snap-preview" style="display:none"></div>
@@ -1151,7 +1153,7 @@
       </div>
     </div>
 
-    <div class="panel" id="lan-panel" data-manage-tab="settings">
+    <div class="panel" id="lan-panel" data-manage-tab="settings" data-local-only>
       <div class="hd"><b>手机访问</b><span id="lan-hint"></span></div>
       <div style="padding:10px 14px 12px;font-size:13px">
         <label class="check" style="display:flex;align-items:center;gap:8px">
@@ -1213,7 +1215,7 @@
       <div id="pending-body"><div class="muted" style="padding:12px 14px;font-size:12px">读取中…</div></div>
     </div>
 
-    <div class="panel" id="guard-panel" data-manage-tab="tools">
+    <div class="panel" id="guard-panel" data-manage-tab="tools" data-local-only>
       <div class="hd"><b>数据急救</b><span id="guard-hint"></span>
         <button class="ghost" id="guard-backup">立即备份</button>
       </div>
@@ -1256,7 +1258,7 @@
 </aside>
 
 <div class="toast" id="toast"></div>
-<button type="button" class="exit-btn" id="exit-btn" title="退出程序（两次点击确认）">退出</button>
+<button type="button" class="exit-btn" id="exit-btn" title="退出程序（两次点击确认）" data-local-only>退出</button>
 <div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="live-alert" class="sr-only" role="alert" aria-atomic="true"></div>
 <div class="picker-mask" id="safety-mask">
@@ -1302,7 +1304,7 @@
 
 <script>
 const $ = (sel) => document.querySelector(sel);
-const BUILD = "0.12.3";          // 与 app.py 的 VERSION 对齐；不一致说明后端没重启
+const BUILD = "0.12.4";          // 与 app.py 的 VERSION 对齐；不一致说明后端没重启
 
 // 隐私模式/存储被禁时 localStorage 会抛异常，统一兜底，不能让初始化白屏
 function lsGet(key) {
@@ -1354,6 +1356,7 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 let state = { characters: [], locations: [] };
+let isLocalClient = true;   // /api/state.local；false 时隐藏本机专用入口
 let csrfToken = "";   // 只在内存里；/api/state 下发，后端重启后靠 403 刷新
 let qtyIndex = Object.create(null);   // 当前搜索结果里每条库存的现有数量
 let searchTimer = null;
@@ -1574,6 +1577,8 @@ async function loadState() {
   ]);
   const chars = (cs && cs.characters) || [];
   state = Object.assign({}, s, { characters: chars });
+  isLocalClient = s.local !== false;
+  document.body.classList.toggle("not-local", !isLocalClient);
   csrfToken = s.csrf_token || csrfToken;
   const keepChar = $("#rec-character").value || lsGet("recChar") || "";
 
@@ -3502,10 +3507,10 @@ async function loadSnapshots() {
         behind +
         '<span class="snap-acts">' +
           '<button class="mini" data-snap-preview="' + esc(s.name) + '">查看</button>' +
-          '<button class="mini" data-snap-restore="' + esc(s.name) + '" data-behind="' + (s.behind_ops || 0) + '">恢复</button>' +
-          '<a class="mini" style="text-decoration:none" href="/api/snapshot/download?name=' +
+          '<button class="mini" data-snap-restore="' + esc(s.name) + '" data-behind="' + (s.behind_ops || 0) + '" data-local-only>恢复</button>' +
+          '<a class="mini" style="text-decoration:none" data-local-only href="/api/snapshot/download?name=' +
             encodeURIComponent(s.name) + '">下载</a>' +
-          '<button class="mini" data-snap-del="' + esc(s.name) + '">删</button>' +
+          '<button class="mini" data-snap-del="' + esc(s.name) + '" data-local-only>删</button>' +
         "</span></div>";
     }).join("");
   } catch (e) {
@@ -3704,6 +3709,7 @@ function copyPlain(text) {
 }
 
 async function loadLan() {
+  if (!isLocalClient) return false;   // 本机专用面板已隐藏
   const body = $("#lan-body");
   try {
     const d = await getJSON("/api/lan");
@@ -4728,6 +4734,7 @@ const guardState = { armed: false, busy: false };
 let dirInfo = null;
 
 async function loadDataDir() {
+  if (!isLocalClient) { dirInfo = null; return null; }
   try { dirInfo = await getJSON("/api/data-dir"); }
   catch (e) { dirInfo = null; }
   return dirInfo;
@@ -4736,6 +4743,7 @@ async function loadDataDir() {
 async function loadGuardInfo() {
   const box = $("#guard-info");
   if (!box) return;
+  if (!isLocalClient) return;   // 本机专用面板已隐藏，不再发 403 请求
   await loadDataDir();
 
   if (!dirInfo) {
@@ -4943,8 +4951,6 @@ function bindGuard() {
       else toast(d.error || "备份失败");
     } catch (err) { toast("备份失败：" + err.message); }
   });
-
-  loadGuardInfo();
 }
 
 /* ---------------- 成本总览 ---------------- */
