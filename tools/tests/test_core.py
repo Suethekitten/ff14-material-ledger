@@ -12,7 +12,9 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import threading
 import unittest
+import http.client
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -831,6 +833,136 @@ class CoreDataTest(unittest.TestCase):
         handler = app.Handler.__new__(app.Handler)
         handler.client_address = ("192.168.1.50", 1234)
         self.assertFalse(handler._is_local_client())
+
+    def _serve_http(self, handler_cls):
+        httpd = app.FastHTTPServer(("127.0.0.1", 0), handler_cls)
+        port = httpd.server_address[1]
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        return httpd, thread, port
+
+    def _stop_http(self, httpd, thread):
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=3)
+
+    def _http(self, port, method, path, headers=None, body=None):
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        try:
+            conn.request(method, path, body=body, headers=headers or {})
+            resp = conn.getresponse()
+            return resp.status, resp.read()
+        finally:
+            conn.close()
+
+    def _remote_handler(self):
+        class RemoteHandler(app.Handler):
+            def setup(self):
+                super().setup()
+                # 测试替身：只模拟服务端识别到的对端地址，不伪造 Host / X-Forwarded-For
+                self.client_address = ("192.0.2.50", 54321)
+
+        return RemoteHandler
+
+    def _headers(self, port):
+        return {
+            "Host": f"127.0.0.1:{port}",
+            "Origin": f"http://127.0.0.1:{port}",
+            "Content-Type": "application/json",
+            "X-CSRF-Token": app.CSRF_TOKEN,
+        }
+
+    def test_remote_api_blocked_when_lan_disabled(self):
+        saved = app.LAN_ENABLED
+        app.LAN_ENABLED = False
+        httpd, thread, port = self._serve_http(self._remote_handler())
+        try:
+            status, _ = self._http(port, "GET", "/api/state",
+                                   {"Host": f"127.0.0.1:{port}"})
+            self.assertEqual(status, 403)
+        finally:
+            app.LAN_ENABLED = saved
+            self._stop_http(httpd, thread)
+
+    def test_remote_local_only_routes_blocked(self):
+        saved = app.LAN_ENABLED
+        app.LAN_ENABLED = True
+        httpd, thread, port = self._serve_http(self._remote_handler())
+        patched = ("set_lan", "backup_now", "build_recipe_index",
+                   "build_npc_shop_index", "restore_snapshot",
+                   "cleanup_legacy_snapshots", "delete_snapshot",
+                   "preview_db_file", "_install_db")
+        originals = {name: getattr(app, name) for name in patched}
+        calls: list[str] = []
+
+        def no_side_effect(name):
+            def call(*_args, **_kwargs):
+                calls.append(name)
+                return {"ok": True}
+
+            return call
+
+        startfile = getattr(app.os, "startfile", None)
+        try:
+            for name in patched:
+                setattr(app, name, no_side_effect(name))
+            if startfile is not None:
+                app.os.startfile = no_side_effect("startfile")
+            headers = self._headers(port)
+            for route in sorted(app.LOCAL_ONLY_GET):
+                status, _ = self._http(port, "GET", route, headers)
+                self.assertEqual(status, 403, route)
+            for route in sorted(app.LOCAL_ONLY_POST):
+                status, _ = self._http(port, "POST", route, headers, b"{}")
+                self.assertEqual(status, 403, route)
+            self.assertEqual(calls, [], "危险处理被执行")
+        finally:
+            for name, func in originals.items():
+                setattr(app, name, func)
+            if startfile is not None:
+                app.os.startfile = startfile
+            app.LAN_ENABLED = saved
+            self._stop_http(httpd, thread)
+
+    def test_security_guards_host_origin_csrf(self):
+        httpd, thread, port = self._serve_http(app.Handler)
+        try:
+            headers = self._headers(port)
+            status, _ = self._http(port, "GET", "/api/state",
+                                   {"Host": "evil.example"})
+            self.assertEqual(status, 403)
+
+            bad_origin = dict(headers, Origin="http://evil.example")
+            status, _ = self._http(port, "POST", "/api/undo", bad_origin, b"{}")
+            self.assertEqual(status, 403)
+
+            body = json.dumps({
+                "character_id": self.char_id,
+                "item_name": "青铜锭",
+                "location": "背包",
+                "qty": 1,
+            }).encode("utf-8")
+            csrf_calls: list[int] = []
+            saved_record = app.record_stock
+            app.record_stock = lambda *a, **k: csrf_calls.append(1) or {"ok": True}
+            try:
+                for token in (None, "wrong-token"):
+                    hdrs = dict(headers)
+                    if token is None:
+                        hdrs.pop("X-CSRF-Token")
+                    else:
+                        hdrs["X-CSRF-Token"] = token
+                    status, _ = self._http(port, "POST", "/api/stock", hdrs, body)
+                    self.assertEqual(status, 403)
+                self.assertEqual(csrf_calls, [])
+            finally:
+                app.record_stock = saved_record
+
+            status, data = self._http(port, "POST", "/api/undo", headers, b"{}")
+            self.assertEqual(status, 200)
+            self.assertFalse(json.loads(data.decode("utf-8"))["ok"])
+        finally:
+            self._stop_http(httpd, thread)
 
     def test_lan_state_uses_actual_port(self):
         saved = app._PORT
