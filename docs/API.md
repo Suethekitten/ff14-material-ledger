@@ -2,7 +2,7 @@
 
 前后端之间唯一的约定。规则见 [AGENTS.md](../AGENTS.md)：**改接口的提交必须同时改这份文档**。
 
-> 初稿由 `app.py` 的 `Handler._do_get` / `do_POST` 路由整理而来。请求参数已逐项对过代码；返回字段大多只写了要点，标「待补」的由后端在下次碰到这个接口时补全。
+> 初稿由 `app.py` 的 `Handler._do_get` / `do_POST` 路由整理而来。请求参数已逐项对过代码；返回字段已按当前实现补全。
 
 ## 通用规则
 
@@ -79,10 +79,10 @@
 | 接口 | 参数 | 返回要点 |
 |---|---|---|
 | `/api/search` | `q`、`account`、`character`、`location`、`hq`、`limit_items`（整数，0 用默认 40，最大 200） | 分层搜索结果；完整字段见下方「`/api/search` 返回字段」 |
-| `/api/stock/lookup` | `character_id`、`location`（缺省「背包」）、`item_name`、`hq` | 这一格现有数量（待补） |
-| `/api/stock/export` | — | 导出用的 CSV 数据（待补） |
-| `/api/stock/safety-lines` | — | 安全线列表（待补） |
-| `/api/pending` | — | 未确认库存（待补） |
+| `/api/stock/lookup` | `character_id`、`location`（缺省「背包」）、`item_name`、`hq` | `found`、`stock_id`、`qty`、`hq`、`stack`、`updated_at`、`item{id, name, matched}`；`matched` 为 `exact` / `alias` / `unbound` |
+| `/api/stock/export` | — | `count`、`csv`（表头 `material,item_id,character,world,account,location,hq,qty,groups,slots,updated_at`）、`text`（制表符分隔，可直接粘贴） |
+| `/api/stock/safety-lines` | — | `scope`、`lines[]`、`low_count`、`unresolved`；每行含 `item_id`、`name`、`min_qty`、`current_qty`、`short_qty`、`status`（`ok` / `low` / `empty`）、`updated_at` |
+| `/api/pending` | — | `summary{rows, qty}`、`items[]`；每项含 `item_name`、`item_id`、`hq`、`total`、`rows[]`；`rows` 每行含 `stock_id`、`character_id`、`character`、`world`、`qty`、`location`（固定「未确认」）、`origin`、`updated_at`、`age_text`、`pending_since`、`moved_text` |
 | `/api/unmapped` | — | `items`：未收录的材料 |
 | `/api/reconcile` | — | `checked`、`issues[]`；每条含 `type`（`ledger_only` 只有流水没有库存 / `stock_only` 只有库存没有流水 / `qty_diff` 两边都有但数量不一致）、`character`、`world`、`item_name`、`item_id`、`location`、`hq_any`、`stock_qty`、`ledger_qty`、`diff` |
 
@@ -132,16 +132,16 @@
 | 接口 | 参数 | 返回要点 |
 |---|---|---|
 | `/api/ledger` | `limit`（缺省 20） | `rows` |
-| `/api/audit` | `from`、`to`、`check`、`character`、`account`；旧参数 `only_checked=1` 等于 `check=1` | 审计汇总（待补） |
-| `/api/audit/export` | 同 `/api/audit` | 审计导出（待补） |
+| `/api/audit` | `from`、`to`、`check`、`character`、`account`；旧参数 `only_checked=1` 等于 `check=1` | `items[]`（`name`、`item_id`、`stack`、`added`、`took`、`adjusted`、`cleared`、`net`、`characters[]`）、`totals`（同五项 + `kinds`）、`ops`、`void_count`；日期格式错误返回 `ok:false` |
+| `/api/audit/export` | 同 `/api/audit` | `text`（可直接复制）、`csv`（表头 `material,added,took,adjusted,cleared,net,characters`） |
 
 ### 部队
 
 | 接口 | 参数 | 返回要点 |
 |---|---|---|
 | `/api/fc` | — | `fcs`、`orphan` |
-| `/api/fc/stock` | `fc_id` | 部队柜库存（待补） |
-| `/api/fc/conflicts` | `fc_id` | 多人重复记录的冲突（待补） |
+| `/api/fc/stock` | `fc_id` | `items[]`（`item_name`、`item_id`、`hq`、`total`、`name`、`qty`、`rows[]`；`rows` 含 `stock_id`、`character`、`world`、`location`、`qty`、`updated_at`）、`rows`、`qty`、`total_qty` |
+| `/api/fc/conflicts` | `fc_id` | `conflicts[]`（`item_name`、`item_id`、`hq`、`entries[]`/`rows[]`、`suggested_qty`/`suggested`、`suggested_from`）、`groups`（同 `conflicts`）、`count` |
 
 ### 成本
 
@@ -154,9 +154,9 @@
 
 | 接口 | 参数 | 返回要点 |
 |---|---|---|
-| `/api/recipe/meta` | — | 配方表状态（待补） |
-| `/api/npc/meta` | — | NPC 商店表状态（待补） |
-| `/api/npc/shop` | `ids` 或 `id`（逗号分隔） | NPC 金币价（待补） |
+| `/api/recipe/meta` | — | `version`、`recipes`（配方条数）、`items`（有配方的物品数） |
+| `/api/npc/meta` | — | `version`、`items`（NPC 商店物品数） |
+| `/api/npc/shop` | `ids` 或 `id`（逗号分隔，最多 100） | `version`、`items`：`{item_id: {price, shops[], quest_required[], achievement_required[], state_required[]}}`；没有数据的物品不出现。数据未就绪返回 `ok:false` |
 | `/api/market/regions` | — | `regions`：国服四个大区 |
 | `/api/market/worlds` | `dc`（缺省「豆豆柴」） | `dc`、`worlds` |
 | `/api/market/price` | `ids` 或 `id`（逗号分隔，最多 100）、`region`（缺省用默认服务器） | `prices`、`requested`、`returned`、`truncated`、`cached`；失败时 `ok:false`、`error`、`failed_items`。缓存 5 分钟 |
@@ -166,7 +166,7 @@
 | 接口 | 参数 | 返回要点 | 备注 |
 |---|---|---|---|
 | `/api/snapshots` | — | `snapshots`、`keep` | |
-| `/api/snapshot/preview` | `name` | 只读查看这份快照（待补） | |
+| `/api/snapshot/preview` | `name` | `name`、`items[]`（`name`、`item_id`、`hq`、`total`、`stack`、`holders[]`）、`ledger_count`；`holders` 含 `character`、`world`、`location`、`qty` | |
 | `/api/snapshot/download` | `name` | **二进制文件**，不是 JSON；找不到 404 | **本机** |
 
 ## POST 接口
@@ -210,7 +210,7 @@
 | `/api/fc` | `name`、`world`、`id?`（有则修改） | 建或改部队 |
 | `/api/fc/adopt` | — | 收编无主的部队柜记录 |
 | `/api/character/fc` | `character_id`、`fc_id` | 角色加入部队 |
-| `/api/fc/merge/apply` | `fc_id`、`items: [...]` | 归并部队柜，数量由用户确认（items 结构待补） |
+| `/api/fc/merge/apply` | `fc_id`、`items: [{item_name, hq, qty, keep_stock_id?}]` | 归并部队柜，`qty` 为用户确认后的总数，`keep_stock_id` 缺省保留第一行；返回 `merged`（成功条数）、`snapshot`。每行 `qty` 超过上限时跳过 |
 | `/api/fc/delete` | `id`、`mode?`（`void` 库存作废并留流水 / `empty` 已搬空直接解散；缺省及其他值都按 `void`） | 解散部队 |
 | `/api/alias` | `alias`、`item_id` | 加备注名。快照 |
 | `/api/alias/delete` | `alias` | 删备注名。快照 |
@@ -268,3 +268,4 @@
 | 2026-11-15 | 0.12.3 | 初稿，从 `app.py` 路由整理 |
 | 2026-11-15 | 0.12.3 | 补齐前端在用字段：买齐报价状态/覆盖/新鲜度、导入歧义、撤销 `code`、恢复四字段与 `stage`、对账 `type`、成本总览字段、配方 `invalid`/`unresolvable_items`、`/api/exit` 标本机 |
 | 2026-11-15 | 0.12.3 | `/api/state` 新增 `local`（仅用于前端隐藏本机按钮），补全 `/api/state`、`/api/search` 返回字段 |
+| 2026-11-15 | 0.12.4（准备中） | 补完全部剩余「待补」接口：库存预览/导出/安全线/未确认、审计、部队库存与冲突、配方/NPC 元数据、快照预览、部队归并 items；数据源改为固定 commit |

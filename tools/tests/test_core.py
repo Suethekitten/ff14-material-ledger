@@ -840,6 +840,15 @@ class CoreDataTest(unittest.TestCase):
         finally:
             app._PORT = saved
 
+    def test_data_sources_are_pinned(self):
+        self.assertRegex(app.SAINT_REF, r"^[0-9a-f]{40}$")
+        for url in (app.ITEMS_URL, app.RECIPE_URL, app.RECIPE_LEVEL_URL):
+            self.assertIn(app.SAINT_REF, url)
+            self.assertNotIn("@master", url)
+        for url in app._saint_mirrors("Recipe.csv"):
+            self.assertIn(app.SAINT_REF, url)
+            self.assertNotIn("/master/", url)
+
     # ---- 恢复 ----
     def test_restore_rejects_incomplete_schema(self):
         self.add(qty=100)

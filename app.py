@@ -239,12 +239,16 @@ def _reaper_loop() -> None:
         except Exception:  # noqa: BLE001 - 看门狗自己不能挂
             continue
 
-ITEMS_URL = "https://cdn.jsdelivr.net/gh/thewakingsands/ffxiv-datamining-cn@master/Item.csv"
+# 数据源锁定：避免上游改格式导致首次启动解析失败。
+# 需要更新游戏数据时，替换 SAINT_REF 后跑一遍全量构建和测试。
+SAINT_GH = "thewakingsands/ff14-datamining-cn"
+SAINT_REF = "ae29be8b21a32329e3356709422427540bf7e364"
+ITEMS_URL = f"https://cdn.jsdelivr.net/gh/{SAINT_GH}@{SAINT_REF}/Item.csv"
 
 # ── 配方展开（v0.12）──
 RECIPE_PATH = DATA_DIR / "recipe.json"
-RECIPE_URL = "https://cdn.jsdelivr.net/gh/thewakingsands/ffxiv-datamining-cn@master/Recipe.csv"
-RECIPE_LEVEL_URL = "https://cdn.jsdelivr.net/gh/thewakingsands/ffxiv-datamining-cn@master/RecipeLevelTable.csv"
+RECIPE_URL = f"https://cdn.jsdelivr.net/gh/{SAINT_GH}@{SAINT_REF}/Recipe.csv"
+RECIPE_LEVEL_URL = f"https://cdn.jsdelivr.net/gh/{SAINT_GH}@{SAINT_REF}/RecipeLevelTable.csv"
 RECIPE_MAX_DEPTH = 12
 RECIPES: dict = {}
 RECIPE_META: dict = {"version": "", "recipes": 0, "items": 0}
@@ -7039,13 +7043,14 @@ def _saint_mirrors(name: str) -> tuple:
     jsdelivr 有几个平行域名（fastly / gcore / testingcf），
     某条线上取不到某个文件时换一条通常就好了；raw 作为最后兜底。
     """
-    gh = "thewakingsands/ff14-datamining-cn"
+    gh = SAINT_GH
+    ref = SAINT_REF
     return (
-        f"https://fastly.jsdelivr.net/gh/{gh}@master/{name}",
-        f"https://gcore.jsdelivr.net/gh/{gh}@master/{name}",
-        f"https://testingcf.jsdelivr.net/gh/{gh}@master/{name}",
-        f"https://cdn.jsdelivr.net/gh/{gh}@master/{name}",
-        f"https://raw.githubusercontent.com/{gh}/master/{name}",
+        f"https://fastly.jsdelivr.net/gh/{gh}@{ref}/{name}",
+        f"https://gcore.jsdelivr.net/gh/{gh}@{ref}/{name}",
+        f"https://testingcf.jsdelivr.net/gh/{gh}@{ref}/{name}",
+        f"https://cdn.jsdelivr.net/gh/{gh}@{ref}/{name}",
+        f"https://raw.githubusercontent.com/{gh}/{ref}/{name}",
     )
 
 
