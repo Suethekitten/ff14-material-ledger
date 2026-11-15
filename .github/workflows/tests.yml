@@ -10,8 +10,6 @@ permissions:
 jobs:
   test:
     runs-on: windows-latest
-    env:
-      FF14_STOCK_DATA: ${{ runner.temp }}\ff14-test
     steps:
       - uses: actions/checkout@v4
 
@@ -21,6 +19,8 @@ jobs:
 
       - name: Prepare test item data
         shell: pwsh
+        env:
+          FF14_STOCK_DATA: ${{ runner.temp }}\ff14-test
         # 测试自己也会建隔离目录；两处都放一份，避免以后测试设施改动后缺物品表。
         run: |
           New-Item -ItemType Directory -Force -Path data | Out-Null
@@ -29,4 +29,6 @@ jobs:
           Copy-Item "tools/tests/fixtures/items.json" (Join-Path $env:FF14_STOCK_DATA "items.json")
 
       - name: Run backend tests
+        env:
+          FF14_STOCK_DATA: ${{ runner.temp }}\ff14-test
         run: python -B -m unittest tools.tests.test_core
