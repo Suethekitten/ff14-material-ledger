@@ -58,7 +58,7 @@
 | `/api/stock/safety-lines` | — | 安全线列表（待补） |
 | `/api/pending` | — | 未确认库存（待补） |
 | `/api/unmapped` | — | `items`：未收录的材料 |
-| `/api/reconcile` | — | 对账差异（待补） |
+| `/api/reconcile` | — | `checked`、`issues[]`；每条含 `type`（`ledger_only` 只有流水没有库存 / `stock_only` 只有库存没有流水 / `qty_diff` 两边都有但数量不一致）、`character`、`world`、`item_name`、`item_id`、`location`、`hq_any`、`stock_qty`、`ledger_qty`、`diff` |
 
 ### 物品与名字
 
@@ -90,7 +90,7 @@
 
 | 接口 | 参数 | 返回要点 |
 |---|---|---|
-| `/api/cost/overview` | — | 全部库存的成本汇总（待补） |
+| `/api/cost/overview` | — | 全量库存成本：`total_value`（库存数量 × 加权均价）、`items_total`、`items_with_cost`、`items_without_cost`、`basis`、`generated_at`。不受搜索 40/200 截断影响 |
 | `/api/purchase` | `item_name`（必填）、`hq` | `item_name`、`hq`、`count`、`avg_cost`、`total_qty`、`total_cost`、`rows`。`purchases`、`batches` 与 `rows` 内容相同，是旧名，新代码用 `rows` |
 
 ### 配方、NPC、市场
@@ -102,7 +102,7 @@
 | `/api/npc/shop` | `ids` 或 `id`（逗号分隔） | NPC 金币价（待补） |
 | `/api/market/regions` | — | `regions`：国服四个大区 |
 | `/api/market/worlds` | `dc`（缺省「豆豆柴」） | `dc`、`worlds` |
-| `/api/market/price` | `ids` 或 `id`（逗号分隔，最多 100）、`region`（缺省用默认服务器） | Universalis 价格，缓存 5 分钟（待补） |
+| `/api/market/price` | `ids` 或 `id`（逗号分隔，最多 100）、`region`（缺省用默认服务器） | `prices`、`requested`、`returned`、`truncated`、`cached`；失败时 `ok:false`、`error`、`failed_items`。缓存 5 分钟 |
 
 ### 快照
 
@@ -123,7 +123,7 @@
 | `/api/page/open` | `sid` | `ok` |
 | `/api/page/ping` | `sid`、`visible?`（缺省 true） | `live` |
 | `/api/page/closed` | `sid` | `ok` |
-| `/api/exit` | — | `ok`；非本机、恢复中会拒绝 |
+| `/api/exit` | — | `ok`；**本机**，非本机、恢复中会拒绝 |
 
 ### 库存
 
@@ -135,14 +135,14 @@
 | `/api/stock/move` | `id`、`qty`、`character_id`、`location?` | 搬货，源和目标同时成功。快照 |
 | `/api/stock/delete` | `id` | 删一行。快照 |
 | `/api/stock/batch` | `character_id`、`text`、`location?`、`mode?` | 批量粘贴，最多 500 行 |
-| `/api/stock/import/preview` | `text`（CSV 全文） | 只预览不写库：`total`、`will_add`、`will_update`、`skipped`、`new_characters`、`rows` |
-| `/api/stock/import/apply` | `text`、`mode?`（`overwrite` / `append`，缺省 `overwrite`） | 导入前自动打快照 |
+| `/api/stock/import/preview` | `text`（CSV 全文） | 只预览不写库：`total`、`will_add`、`will_update`、`skipped`、`new_characters`、`rows`；`ambiguous[]` 每项含 `line`、`character`、`world`、`candidates[]{account, character_id, qty}` |
+| `/api/stock/import/apply` | `text`、`mode?`（`overwrite` / `append`，缺省 `overwrite`） | 导入前自动打快照。存在 `ambiguous` 时整批中止：`{ok:false, error, ambiguous}`，不写库 |
 | `/api/stock/safety-line` | `item_id`、`min_qty` | 设安全线 |
 | `/api/stock/safety-line/delete` | `item_id` | 删安全线 |
 | `/api/location/delete` | `character_id`、`location` | 清空一个位置，库存转入未确认 |
 | `/api/pending/move` | `stock_id`、`character_id`、`location?` | 未确认库存转移 |
 | `/api/pending/drop` | `stock_id`、`note?` | 未确认库存丢弃 |
-| `/api/undo` | — | 撤销最近一条库存操作。快照 |
+| `/api/undo` | — | 撤销最近一条库存操作。快照。失败时带 `code`：`none`（没有可撤销/已撤销）、`voided`（最新一条已标异常）、`unsupported_move`（搬移/改位置不能单条撤销）、`unsupported_op`（未确认/部队类操作挡在前面）、`crossed_ops`（该格已被后续操作改动） |
 
 ### 角色、部队、名字
 
@@ -184,8 +184,8 @@
 
 | 接口 | 请求体 | 说明 |
 |---|---|---|
-| `/api/recipe/expand` | `targets: [{item_id, quantity}]`（旧写法：顶层 `item_id`、`quantity`）、`stock?`（使用库存）、`overrides?`、`with_alternatives?`、`target_stock?`（缺省 true，成品本身也抵扣库存） | 展开配方（返回结构待补） |
-| `/api/market/buy-plan` | `region?`、`hq?`、`items: [...]` | 按挂单逐档算买齐成本；返回的 `items`、`unresolved` 每行带 `name`（items 结构待补） |
+| `/api/recipe/expand` | `targets: [{item_id, quantity}]`（旧写法：顶层 `item_id`、`quantity`）、`stock?`（使用库存）、`overrides?`、`with_alternatives?`、`target_stock?`（缺省 true，成品本身也抵扣库存） | 展开配方。数量非法（小数、字符串、≤0、>9,999,999）返回 HTTP 400：`{ok:false, invalid:true, error:"数量必须是 1–9999999 的整数"}`。`unresolvable_items[]` 每项含 `item_id`、`name`、`reason` |
+| `/api/market/buy-plan` | `region?`、`hq?`、`items: [...]` | 按挂单逐档算买齐成本。返回 `status`（`ok` / `partial` / `failed`）、`failed_items`、`coverage`（`items`、`priced`、`short_items`、`failed_items`、`listings_truncated`、`truncated_items`）、`freshness`（`oldest_upload`、`newest_upload`）、`price_kind`、`tax_note`、`cached`、`error`。全部批次失败时 `ok:false, status:"failed"`；部分失败 `ok:true, status:"partial"`；`items`、`unresolved` 每行带 `name` |
 
 ### 本机专用
 
@@ -196,11 +196,11 @@
 | `/api/lan` | `enabled` | 开关手机访问 |
 | `/api/open-data-dir` | — | 在资源管理器里打开数据目录 |
 | `/api/data/backup` | — | 立即备份 |
-| `/api/snapshot/restore` | `name` | 恢复快照，恢复前先打「恢复前」快照 |
+| `/api/snapshot/restore` | `name` | 恢复快照，恢复前先打「恢复前」快照。返回 `replaced`（是否已替换）、`rolled_back`（失败后是否回滚成功）、`backup`（备份文件名）、`stage`（`not_replaced` / `replaced` / `rolled_back` / `rollback_failed`） |
 | `/api/snapshot/delete` | `name` | 删一份快照 |
 | `/api/snapshot/cleanup` | — | 清理早期没有摘要的自动快照 |
 | `/api/db/preview` | `.db` 文件字节 | 预览要导入的数据库 |
-| `/api/db/restore` | `.db` 文件字节 | 整份覆盖。先校验结构，原库自动备份，失败回滚 |
+| `/api/db/restore` | `.db` 文件字节 | 整份覆盖。先校验结构，原库自动备份，失败回滚。返回字段同 `/api/snapshot/restore`：`replaced`、`rolled_back`、`backup`、`stage` |
 | `/api/recipe/rebuild` | — | 重新下载并构建配方表 |
 | `/api/npc/rebuild` | — | 重新下载并构建 NPC 商店表 |
 
@@ -209,3 +209,4 @@
 | 日期 | 版本 | 改了什么 |
 |---|---|---|
 | 2026-11-15 | 0.12.3 | 初稿，从 `app.py` 路由整理 |
+| 2026-11-15 | 0.12.3 | 补齐前端在用字段：买齐报价状态/覆盖/新鲜度、导入歧义、撤销 `code`、恢复四字段与 `stage`、对账 `type`、成本总览字段、配方 `invalid`/`unresolvable_items`、`/api/exit` 标本机 |
