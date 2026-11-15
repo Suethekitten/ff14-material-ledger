@@ -282,6 +282,7 @@ python app.py --clear-demo    # 删除示例数据
 - **打包 exe**：先从源码运行一次，确保 `data\` 里有三份游戏数据，然后双击 `build_exe.bat`（首次会自动装 `pyinstaller`）。产物在 `dist\ff14-stock\`，要发的是整个文件夹，不是单独的 exe
 - **生成发布 zip**：双击 `发布打包.bat`。zip 里不含你自己的 `data\`
 - **版本记录**：见 [CHANGELOG.md](CHANGELOG.md)
+- **前后端接口**：见 [docs/API.md](docs/API.md)；给 AI agent 的协作规则见 [AGENTS.md](AGENTS.md)
 
 ---
 
