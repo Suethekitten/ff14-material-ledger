@@ -241,7 +241,7 @@ def _reaper_loop() -> None:
 
 # 数据源锁定：避免上游改格式导致首次启动解析失败。
 # 需要更新游戏数据时，替换 SAINT_REF 后跑一遍全量构建和测试。
-SAINT_GH = "thewakingsands/ff14-datamining-cn"
+SAINT_GH = "thewakingsands/ffxiv-datamining-cn"
 SAINT_REF = "ae29be8b21a32329e3356709422427540bf7e364"
 ITEMS_URL = f"https://cdn.jsdelivr.net/gh/{SAINT_GH}@{SAINT_REF}/Item.csv"
 
@@ -6502,7 +6502,7 @@ def build_recipe_index(progress=None) -> dict:
 
     payload = {
         "version": datetime.now().strftime("%Y-%m-%d"),
-        "source": "ffxiv-datamining-cn@master/Recipe.csv",
+        "source": f"{SAINT_GH}@{SAINT_REF}/Recipe.csv",
         "recipes": recipes,
     }
     try:

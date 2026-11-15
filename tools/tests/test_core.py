@@ -841,11 +841,14 @@ class CoreDataTest(unittest.TestCase):
             app._PORT = saved
 
     def test_data_sources_are_pinned(self):
+        self.assertEqual(app.SAINT_GH, "thewakingsands/ffxiv-datamining-cn")
         self.assertRegex(app.SAINT_REF, r"^[0-9a-f]{40}$")
         for url in (app.ITEMS_URL, app.RECIPE_URL, app.RECIPE_LEVEL_URL):
+            self.assertIn(app.SAINT_GH, url)
             self.assertIn(app.SAINT_REF, url)
             self.assertNotIn("@master", url)
         for url in app._saint_mirrors("Recipe.csv"):
+            self.assertIn(app.SAINT_GH, url)
             self.assertIn(app.SAINT_REF, url)
             self.assertNotIn("/master/", url)
 
