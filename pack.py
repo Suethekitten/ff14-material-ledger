@@ -33,6 +33,8 @@ ZIP_NAME = f"ff14-stock-v{VERSION}.zip"
 ALWAYS = [
     "app.py",
     "market.py",
+    "datasource.py",
+    "npc_shop.py",
     "启动.bat",
     "README.md",
     "测试说明.md",

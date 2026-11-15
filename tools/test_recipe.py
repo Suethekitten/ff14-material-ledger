@@ -19,6 +19,8 @@ os.environ["FF14_STOCK_DATA"] = str(TMP)
 sys.path.insert(0, str(ROOT))
 
 import app as A  # noqa: E402
+import datasource  # noqa: E402
+import npc_shop  # noqa: E402
 
 FAIL = 0
 
@@ -337,37 +339,37 @@ def main() -> int:
             return gs_header, gs_rows
         return it_header, it_rows
 
-    orig_csv = A._read_saint_csv
-    A._read_saint_csv = fake_csv
+    orig_csv = datasource.read_saint_csv
+    datasource.read_saint_csv = fake_csv
     try:
         res = A.build_npc_shop_index()
     finally:
-        A._read_saint_csv = orig_csv
+        datasource.read_saint_csv = orig_csv
 
     check("构建成功", res.get("ok") is True, str(res))
     check("收集到 2 个物品", res.get("items") == 2, str(res.get("items")))
     check("无价物品被跳过", res.get("skipped_no_price") == 1, str(res.get("skipped_no_price")))
-    e1 = A.NPC_SHOPS.get(4594) or {}
+    e1 = npc_shop.NPC_SHOPS.get(4594) or {}
     check("秘银锭价格 514", e1.get("price") == 514, str(e1))
     check("商店 ID 取整数部分",
           [s["id"] for s in e1.get("shops") or []] == [262144], str(e1.get("shops")))
     check("商店名 join 上了",
           (e1.get("shops") or [{}])[0].get("name") == "伊修加德杂货商", str(e1.get("shops")))
-    e2 = A.NPC_SHOPS.get(4552) or {}
+    e2 = npc_shop.NPC_SHOPS.get(4552) or {}
     check("任务前置 66646", e2.get("quest_required") == [66646], str(e2.get("quest_required")))
     check("成就前置 1558", e2.get("achievement_required") == [1558], str(e2.get("achievement_required")))
-    check("无价物品不在表里", 9999 not in A.NPC_SHOPS, str(list(A.NPC_SHOPS)))
+    check("无价物品不在表里", 9999 not in npc_shop.NPC_SHOPS, str(list(npc_shop.NPC_SHOPS)))
 
-    look = A.npc_shop_lookup([4594, 9999])
+    look = npc_shop.npc_shop_lookup([4594, 9999])
     check("查询返回 ok", look.get("ok") is True, str(look))
     check("没数据的物品不出现", list(look["items"]) == ["4594"], str(look["items"]))
 
-    saved_shops = A.NPC_SHOPS
-    A.NPC_SHOPS = {}
+    saved_shops = npc_shop.NPC_SHOPS
+    npc_shop.NPC_SHOPS = {}
     try:
-        empty = A.npc_shop_lookup([4594])
+        empty = npc_shop.npc_shop_lookup([4594])
     finally:
-        A.NPC_SHOPS = saved_shops
+        npc_shop.NPC_SHOPS = saved_shops
     check("数据未就绪时 ok:false", empty.get("ok") is False, str(empty))
 
     print("\n⑫ 配方表缺失")
