@@ -1,0 +1,1973 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FF14 材料台账 v2</title>
+<link rel="icon" type="image/svg+xml" href="/logo-16.svg">
+<link rel="alternate icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<style>
+/* ━━━━━ 配置说明 ━━━━━
+   默认走同源相对路径（页面由后端伺服，端口/手机访问自动适应）
+   如需连别的后端：右上角 ⚙ 输入地址，或改 JS 里的 CFG.baseUrl
+━━━━━━━━━━━━━━━━━━ */
+
+/* ━━━━━ 设计令牌 ━━━━━ */
+:root {
+  --bg: #f0f2f5; --panel: #ffffff; --panel-2: #eef1f4; --text: #1a202c;
+  --muted: #5f6a76; --line: #e3e7ec; --accent: #2a7180; --accent-soft: #e9f3f5;
+  --warn: #b45309; --warn-bg: #fdf5e9; --danger: #b91c1c; --danger-soft: #fef2f2;
+  --ok: #15803d; --hq: #b8882a; --hq-soft: #fdf8ed;
+  --nav-bg: #1a2535; --nav-text: #c8d4e0; --nav-text-active: #ffffff;
+  --radius: 8px; --shadow: 0 1px 3px rgba(15,23,42,.08);
+  --shadow-lg: 0 8px 24px rgba(15,23,42,.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418; --panel: #181d23; --panel-2: #20262e; --text: #e7ebf0;
+    --muted: #98a3b0; --line: #2a323b; --accent: #63b6c6; --accent-soft: #1c3138;
+    --warn: #eab069; --warn-bg: #2b2318; --danger: #f2777a; --danger-soft: #2b1a1a;
+    --ok: #5cc98a; --hq: #d4a84b; --hq-soft: #2b2318;
+    --nav-bg: #0d1117; --nav-text: #8b97a6; --nav-text-active: #e7ebf0;
+    --shadow: 0 1px 3px rgba(0,0,0,.3); --shadow-lg: 0 8px 24px rgba(0,0,0,.5);
+  }
+}
+
+/* ━━━━━ 重置 ━━━━━ */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.55 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; overflow: hidden;
+}
+button, input, select { font-family: inherit; font-size: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+/* ━━━━━ 控件 ━━━━━ */
+input[type=text], input[type=number], select {
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 10px; height: 36px; outline: none;
+}
+input[type=text]:focus, select:focus { border-color: var(--accent); }
+button { cursor: pointer; border: none; transition: filter .15s; }
+button:disabled { opacity: .45; cursor: default; }
+.btn-primary {
+  background: var(--accent); color: #fff; border-radius: 6px;
+  padding: 0 18px; height: 36px; font-size: 13px; font-weight: 500;
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-ghost {
+  background: transparent; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 6px; padding: 0 12px; height: 32px; font-size: 13px;
+}
+.btn-ghost:hover { color: var(--text); border-color: color-mix(in srgb, var(--text) 25%, transparent); }
+.btn-mini {
+  background: transparent; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 4px; padding: 2px 8px; font-size: 12px; white-space: nowrap;
+}
+.btn-mini:hover { color: var(--text); }
+.btn-mini.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.btn-mini.danger:hover { background: var(--danger-soft); }
+.btn-mini.armed { background: var(--danger); color: #fff; border-color: var(--danger); }
+.topbar-actions .btn-ghost.armed { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+/* ━━━━━ 顶部导航 ━━━━━ */
+.topbar {
+  background: var(--nav-bg); color: var(--nav-text); height: 52px;
+  display: flex; align-items: center; gap: 12px; padding: 0 16px; flex-shrink: 0; z-index: 100;
+}
+.topbar-brand { display: flex; align-items: center; gap: 8px; color: var(--nav-text-active);
+  font-size: 15px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.brand-logo { width: 24px; height: 24px; border-radius: 5px; flex-shrink: 0; }
+.topbar-version { font-size: 11px; color: var(--nav-text); border: 1px solid #3a4b60;
+  border-radius: 4px; padding: 1px 6px; }
+.topbar-stats { display: flex; gap: 20px; flex: 1; justify-content: center; font-size: 12px; }
+.stat-item { display: flex; align-items: center; gap: 5px; }
+.stat-label { color: var(--nav-text); }
+.stat-value { color: var(--nav-text-active); font-weight: 500; font-variant-numeric: tabular-nums; }
+.topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.topbar-actions .btn-ghost { color: var(--nav-text); border-color: #3a4b60; height: 30px; }
+.topbar-actions .btn-ghost:hover { color: var(--nav-text-active); }
+/* 快捷键面板（与算料页共用同一套交互） */
+.hk-open { background: transparent; border: 1px solid #3a4b60; color: var(--nav-text); border-radius: 6px; height: 30px; width: 34px; font-size: 14px; }
+.hk-open:hover { color: var(--nav-text-active); }
+.hk-panel { position: fixed; z-index: 80; width: 320px; max-width: calc(100vw - 16px); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 14px; }
+.hk-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.hk-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.hk-name { flex: 1; font-size: 13px; }
+.hk-combo { min-width: 90px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); font-size: 12px; }
+.hk-combo.recording { border-color: var(--danger); color: var(--danger); }
+.hk-record { height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--accent); font-size: 12px; }
+.hk-tip { font-size: 11px; color: var(--muted); margin: 8px 0; }
+.hk-actions button { height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--muted); font-size: 12px; }
+
+/* ━━━━━ 筛选区 ━━━━━ */
+.filter-bar {
+  background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; flex-shrink: 0;
+}
+.search-row { display: flex; gap: 8px; align-items: center; }
+.search-wrap { position: relative; flex: 1; }
+.search-wrap input { width: 100%; height: 38px; padding: 0 36px 0 12px; }
+.search-clear {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: var(--muted); font-size: 16px; padding: 2px;
+}
+.search-clear:hover { color: var(--text); }
+.filter-expanded { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.filter-expanded select { height: 32px; font-size: 13px; flex: 1; min-width: 100px; max-width: 200px; }
+.active-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 4px; background: var(--accent-soft);
+  color: var(--accent); border-radius: 20px; padding: 2px 10px; font-size: 12px;
+}
+.filter-chip button { background: none; border: none; color: var(--accent); padding: 0 0 0 2px;
+  font-size: 14px; line-height: 1; }
+.result-bar { display: flex; align-items: center; justify-content: space-between;
+  margin-top: 6px; font-size: 12px; color: var(--muted); }
+
+/* ━━━━━ 主布局 ━━━━━ */
+.main-layout { flex: 1; display: flex; min-height: 0; overflow: hidden; }
+.list-pane { flex: 1; overflow-y: auto; padding: 12px 16px; min-width: 0; }
+.detail-pane {
+  width: 320px; flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--line);
+  overflow-y: auto; display: flex; flex-direction: column;
+}
+
+/* ━━━━━ 材料列表 ━━━━━ */
+.item-list { display: flex; flex-direction: column; gap: 2px; }
+.item-card {
+  background: var(--panel); border-radius: 6px; border: 1px solid transparent;
+  transition: border-color .15s; overflow: hidden;
+}
+.item-card:hover { border-color: var(--line); }
+.item-card.selected { border-color: var(--accent); }
+.item-card.warn-stack { border-left: 3px solid var(--warn); }
+.item-main {
+  display: grid; grid-template-columns: 36px 1fr auto auto 28px; align-items: center;
+  gap: 10px; padding: 8px 12px; cursor: pointer; user-select: none; min-height: 52px;
+}
+.item-main:hover { background: var(--panel-2); }
+.item-icon-wrap {
+  width: 36px; height: 36px; border-radius: 4px; overflow: hidden; flex-shrink: 0;
+  background: var(--panel-2); position: relative;
+}
+.item-icon-wrap img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.item-icon-placeholder {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  font-size: 18px; background: linear-gradient(135deg, #2a7180 0%, #1a4a56 100%);
+  color: rgba(255,255,255,.6);
+}
+.item-info { min-width: 0; }
+.item-name-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.item-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.badge-hq { background: var(--hq); color: #fff; border-radius: 3px; font-size: 10px;
+  font-weight: 700; padding: 1px 4px; flex-shrink: 0; }
+.badge-nq { border: 1px solid var(--muted); color: var(--muted); border-radius: 3px;
+  font-size: 10px; padding: 0px 3px; flex-shrink: 0; }
+.item-alias { font-size: 11px; color: var(--muted); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.cost-note { font-size: 11px; color: var(--muted); cursor: pointer; display: inline-block; margin-top: 2px; }
+.cost-note:hover { color: var(--accent); }
+.cost-note.empty { color: var(--accent); }
+.cost-note b { color: var(--text); font-weight: 600; }
+.cost-edit { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.inline-cost { width: 72px; height: 24px; padding: 2px 6px; font-size: 12px; border: 1px solid var(--accent); border-radius: 4px; background: var(--panel); color: var(--text); }
+.kind-tag { font-size: 10px; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 0 4px; }
+.item-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  font-size: 12px; color: var(--muted); white-space: nowrap; }
+.stale-indicator { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.item-qty { font-size: 18px; font-weight: 600; text-align: right; white-space: nowrap;
+  font-variant-numeric: tabular-nums; min-width: 60px; }
+.item-qty.stale { color: var(--warn); }
+.expand-btn {
+  background: none; border: none; color: var(--muted); padding: 4px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center; transition: transform .2s;
+}
+.expand-btn:hover { color: var(--text); background: var(--panel-2); }
+.item-card.expanded .expand-btn { transform: rotate(90deg); }
+
+/* 持有者列表 */
+.holder-list { border-top: 1px solid var(--line); background: var(--panel-2); }
+.holder-row {
+  display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 8px;
+  padding: 7px 12px 7px 58px; border-bottom: 1px solid var(--line);
+}
+.holder-row:last-child { border-bottom: none; }
+.holder-info { min-width: 0; }
+.holder-char { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.holder-loc { font-size: 11px; color: var(--muted); }
+.holder-qty-cell { font-size: 14px; font-weight: 500; text-align: right; white-space: nowrap;
+  font-variant-numeric: tabular-nums; min-width: 50px; }
+.holder-age { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.holder-age.stale { color: var(--warn); }
+.holder-ops { display: flex; gap: 4px; }
+.holder-hq-badge { background: var(--hq); color: #fff; border-radius: 3px; font-size: 10px;
+  font-weight: 700; padding: 1px 4px; }
+
+/* ━━━━━ 右侧详情面板 ━━━━━ */
+.detail-empty { flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; color: var(--muted); text-align: center; padding: 32px; gap: 12px; }
+.detail-content { flex: 1; overflow-y: auto; }
+.detail-head { display: flex; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); align-items: flex-start; }
+.detail-icon-wrap { width: 48px; height: 48px; border-radius: 6px; overflow: hidden;
+  flex-shrink: 0; background: var(--panel-2); position: relative; }
+.detail-icon-wrap img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.detail-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.detail-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.detail-total { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.detail-section { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.detail-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); margin-bottom: 8px; }
+.detail-holder-row { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.detail-holder-row:last-child { border-bottom: none; }
+.dh-top { display: flex; justify-content: space-between; align-items: center; }
+.dh-char { font-size: 13px; font-weight: 500; }
+.dh-qty { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dh-loc-age { display: flex; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.dh-age.stale { color: var(--warn); }
+.dh-ops { display: flex; gap: 6px; margin-top: 8px; }
+.detail-actions { padding: 12px 16px; display: flex; gap: 8px; }
+.detail-actions .btn-primary { flex: 1; }
+.cost-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+.cost-row .label { color: var(--muted); }
+.cost-row .value { font-variant-numeric: tabular-nums; font-weight: 500; }
+
+/* ━━━━━ 状态页 ━━━━━ */
+.state-loading, .state-empty, .state-error {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 60px 24px; text-align: center; color: var(--muted); gap: 12px;
+}
+.state-error { color: var(--danger); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner { width: 32px; height: 32px; border: 3px solid var(--line);
+  border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+.skeleton { background: linear-gradient(90deg, var(--panel-2) 25%, var(--line) 50%, var(--panel-2) 75%);
+  background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 4px; }
+.skeleton-row { height: 52px; background: var(--panel); border-radius: 6px; margin-bottom: 2px;
+  padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+.skeleton-icon { width: 36px; height: 36px; flex-shrink: 0; border-radius: 4px; }
+.skeleton-text { flex: 1; height: 14px; max-width: 180px; }
+.skeleton-qty { width: 60px; height: 20px; }
+
+/* ━━━━━ Toast ━━━━━ */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--nav-bg); color: var(--nav-text-active); padding: 10px 20px;
+  border-radius: var(--radius); font-size: 13px; box-shadow: var(--shadow-lg);
+  pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 999;
+  white-space: nowrap; max-width: calc(100vw - 32px);
+}
+.toast.show { opacity: 1; }
+.toast.warn { background: var(--warn); color: #fff; }
+
+/* ━━━━━ 移动端抽屉 ━━━━━ */
+.drawer-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; }
+.drawer {
+  position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel);
+  border-radius: 12px 12px 0 0; max-height: 85vh; overflow-y: auto; z-index: 201;
+  transform: translateY(100%); transition: transform .3s cubic-bezier(.32,0,.67,0);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.drawer.open { transform: translateY(0); }
+.drawer-handle { width: 36px; height: 4px; background: var(--line); border-radius: 2px; margin: 10px auto 6px; }
+.drawer-body { padding: 0 0 16px; }
+
+/* ━━━━━ 配置弹窗 ━━━━━ */
+.config-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 500;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.config-box {
+  background: var(--panel); border-radius: var(--radius); padding: 24px;
+  width: 100%; max-width: 420px; box-shadow: var(--shadow-lg);
+}
+.config-box h2 { margin: 0 0 8px; font-size: 16px; }
+.config-box p { margin: 0 0 16px; font-size: 13px; color: var(--muted); }
+.config-box input { width: 100%; margin-bottom: 12px; }
+.config-actions { display: flex; gap: 8px; }
+.config-actions .btn-primary { flex: 1; }
+
+/* ━━━━━ 安全线弹窗 ━━━━━ */
+.safety-modal {
+  background: var(--panel); border-radius: var(--radius); padding: 0;
+  width: 100%; max-width: 520px; max-height: 80vh; box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column;
+}
+.safety-header {
+  padding: 16px 20px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.safety-header h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.safety-stats { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.safety-close { background: none; border: none; color: var(--muted); font-size: 20px; padding: 4px; cursor: pointer; }
+.safety-close:hover { color: var(--text); }
+.safety-body { flex: 1; overflow-y: auto; padding: 12px; }
+.safety-empty {
+  text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px;
+}
+.safety-item {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 12px; margin-bottom: 8px; display: flex; gap: 12px; align-items: center;
+}
+.safety-icon-wrap { width: 36px; height: 36px; border-radius: 4px; overflow: hidden; flex-shrink: 0; background: var(--panel-2); }
+.safety-icon-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.safety-info { flex: 1; min-width: 0; }
+.safety-name { font-weight: 500; font-size: 13px; }
+.safety-nums { display: flex; gap: 12px; font-size: 12px; margin-top: 2px; }
+.safety-nums span { color: var(--muted); }
+.safety-nums .current { font-weight: 500; }
+.safety-status {
+  width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.safety-status.ok { background: var(--ok); color: #fff; }
+.safety-status.low { background: var(--warn); color: #fff; }
+.safety-status.empty { background: var(--danger); color: #fff; }
+.safety-del { color: var(--danger); font-size: 12px; padding: 4px 8px; }
+
+.truncated-hint { text-align: center; padding: 10px; font-size: 12px; color: var(--muted); }
+.truncated-hint a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+
+/* ━━━━━ 写操作模态 / 表单 ━━━━━ */
+.wmodal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 600; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.wmodal { background: var(--panel); border-radius: var(--radius); width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+.wmodal.wide { max-width: 560px; }
+.wmodal-hd { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 2; }
+.wmodal-hd b { font-size: 15px; }
+.wmodal-close { background: none; border: none; color: var(--muted); font-size: 20px; padding: 2px 6px; }
+.wmodal-close:hover { color: var(--text); }
+.wmodal-body { padding: 16px 18px; }
+.wform { display: flex; flex-direction: column; gap: 12px; }
+.wfield { display: flex; flex-direction: column; gap: 4px; }
+.wfield > label { font-size: 12px; color: var(--muted); }
+.wfield input[type=text], .wfield input[type=number], .wfield select { width: 100%; }
+.wfield .sub { font-size: 11px; color: var(--muted); }
+.wrow { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.wrow > .wfield { flex: 1; min-width: 0; }
+.qty-mode { display: inline-flex; align-self: flex-start; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.qty-mode button { background: var(--panel); color: var(--muted); border: 0; padding: 6px 14px; font-size: 12px; }
+.qty-mode button.on { background: var(--accent); color: #fff; }
+.qty-three { display: flex; gap: 6px; align-items: center; }
+.qty-three input { width: 100%; }
+.qty-three .qt-total { flex: 2; }
+.qty-three .qt-part { flex: 1; }
+.qty-three .unit { font-size: 12px; color: var(--muted); flex: 0 0 auto; }
+.hintline { font-size: 12px; color: var(--muted); min-height: 16px; }
+.hintline.warn { color: var(--warn); }
+.hintline.bad { color: var(--danger); }
+.form-error { display: flex; align-items: center; gap: 8px; background: var(--danger-soft); color: var(--danger); border-radius: 6px; padding: 8px 12px; font-size: 12px; }
+.form-error .msg { flex: 1; }
+.form-error button { background: none; border: 1px solid currentColor; color: inherit; border-radius: 4px; padding: 1px 8px; font-size: 12px; }
+.wcheck { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.wcheck input { width: 16px; height: 16px; accent-color: var(--accent); }
+.wactions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.wactions .btn-primary { flex: 1; }
+.sugg-list { position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 30; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow-lg); max-height: 240px; overflow-y: auto; }
+.sugg-list .row { padding: 7px 10px; cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+.sugg-list .row .id { color: var(--muted); font-size: 11px; }
+.sugg-list .row .al { color: var(--muted); font-size: 11px; }
+.sugg-list .row:hover, .sugg-list .row.active { background: var(--accent-soft); }
+.sugg-wrap { position: relative; }
+.picker-sec { font-size: 11px; color: var(--muted); margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .04em; }
+.picker-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; cursor: pointer; font-size: 13px; }
+.picker-row:hover { background: var(--accent-soft); }
+.picker-row .bind { margin-left: auto; font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 6px; }
+.loc-del-btn { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.loc-del-btn.armed { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+/* ━━━━━ 响应式 ━━━━━ */
+/* 平板/小屏 */
+@media (max-width: 768px) {
+  .detail-pane { display: none; }
+  .topbar-stats { display: none; }
+  .topbar-brand .topbar-version { display: none; }
+  .filter-expanded select { max-width: none; }
+  .item-name { max-width: 160px; }
+  .holder-row { grid-template-columns: 1fr auto auto; }
+  .holder-ops { display: none; }
+}
+/* 手机 */
+@media (max-width: 480px) {
+  .topbar { padding: 0 10px; gap: 8px; height: 48px; }
+  .topbar-brand { font-size: 14px; }
+  .topbar-brand .brand-logo { width: 18px; height: 18px; }
+  .topbar-actions { gap: 6px; }
+  .topbar-actions .btn-ghost { padding: 0 10px; font-size: 12px; }
+
+  .filter-bar { padding: 8px 10px; }
+  .search-wrap input { height: 36px; font-size: 14px; }
+  #btn-toggle-filter, #btn-record { height: 32px; font-size: 12px; padding: 0 10px; }
+  .filter-expanded { padding: 10px 0 0; gap: 8px; }
+
+  .list-pane { padding: 8px; }
+  .item-card { margin-bottom: 6px; }
+  /* 4 个可见子元素：图标 / 信息 / 数量 / 展开（.item-meta 已隐藏） */
+  .item-main { grid-template-columns: 32px 1fr auto auto; gap: 8px; padding: 8px 10px; }
+  .item-icon-wrap { width: 32px; height: 32px; }
+  .item-name { font-size: 14px; max-width: none; }
+  .badge-hq { font-size: 10px; padding: 1px 4px; }
+  .item-qty { font-size: 16px; min-width: 44px; }
+  .expand-btn { width: 20px; height: 20px; }
+  .item-meta { display: none; }
+
+  .holder-row { padding: 6px 10px; gap: 6px; font-size: 12px; }
+  .holder-char { font-size: 12px; }
+  .holder-loc { font-size: 11px; }
+  .holder-qty-cell { font-size: 13px; min-width: 40px; }
+
+  .state-empty { padding: 40px 16px; font-size: 13px; }
+  .state-empty svg { width: 48px; height: 48px; }
+}
+</style>
+</head>
+<body>
+<!-- 配置弹窗 -->
+<div class="config-overlay" id="config-overlay">
+  <div class="config-box">
+    <h2>🎮 FF14 材料台账 v2</h2>
+    <p>请输入后端服务地址</p>
+    <input type="text" id="config-url" placeholder="留空使用当前地址" />
+    <div class="config-actions">
+      <button class="btn-primary" id="config-confirm">连接</button>
+    </div>
+  </div>
+</div>
+
+<!-- 顶部导航 -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <img class="brand-logo" src="/logo-dark.svg" width="24" height="24" alt="">
+    FF14 材料台账
+    <span class="topbar-version" id="top-version">v2</span>
+  </div>
+  <div class="topbar-stats">
+    <div class="stat-item"><span class="stat-label">角色</span><span class="stat-value" id="stat-chars">—</span></div>
+    <div class="stat-item"><span class="stat-label">库存行</span><span class="stat-value" id="stat-rows">—</span></div>
+    <div class="stat-item"><span class="stat-label">总数量</span><span class="stat-value" id="stat-qty">—</span></div>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn-ghost" onclick="location.href='recipe-planner.html'">算料清单</button>
+    <button class="btn-ghost" id="btn-safety">安全线</button>
+    <button class="btn-ghost" id="btn-pending" hidden>未确认</button>
+    <button class="btn-ghost" id="btn-undo">撤销</button>
+    <button class="btn-ghost" id="btn-batch">批量</button>
+    <button class="btn-ghost" id="btn-chars">角色</button>
+    <button class="btn-ghost" id="btn-export">导出</button>
+    <button class="btn-ghost" id="btn-settings" title="连接设置">⚙</button>
+  </div>
+</header>
+
+<!-- 筛选区 -->
+<div class="filter-bar">
+  <div class="search-row">
+    <div class="search-wrap">
+      <input type="text" id="q-input" placeholder="搜索材料名、角色或位置…" autocomplete="off" />
+      <button class="search-clear" id="btn-clear-q" hidden title="清空">✕</button>
+    </div>
+    <button class="btn-ghost" id="btn-toggle-filter">筛选</button>
+    <button class="btn-ghost" id="btn-record">记一笔</button>
+  </div>
+  <div class="filter-expanded" id="filter-expanded" hidden>
+    <select id="f-account"><option value="">全部账号</option></select>
+    <select id="f-character"><option value="">全部角色</option></select>
+    <select id="f-location"><option value="">全部位置</option></select>
+    <select id="f-hq"><option value="">NQ + HQ</option><option value="1">仅 HQ</option><option value="0">仅 NQ</option></select>
+  </div>
+  <div class="active-chips" id="active-chips"></div>
+  <div class="result-bar" id="result-bar" hidden>
+    <span id="result-text"></span>
+    <span><a id="btn-clear-filters" style="color:var(--accent);cursor:pointer;">清空筛选</a></span>
+  </div>
+</div>
+
+<!-- 主布局 -->
+<div class="main-layout">
+  <div class="list-pane"><div class="item-list" id="item-list"></div></div>
+  <aside class="detail-pane">
+    <div class="detail-empty" id="detail-empty">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2"/>
+        <path d="M24 16v8M24 28v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span>点击左侧材料查看详情</span>
+    </div>
+    <div class="detail-content" id="detail-content" hidden></div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="drawer-mask" id="drawer-mask" hidden></div>
+<div class="drawer" id="detail-drawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-body" id="drawer-body"></div>
+</div>
+
+<!-- 安全线弹窗 -->
+<div class="config-overlay" id="safety-overlay" hidden>
+  <div class="safety-modal">
+    <div class="safety-header">
+      <div>
+        <h2>安全线</h2>
+        <div class="safety-stats" id="safety-stats">—</div>
+      </div>
+      <button class="safety-close" id="safety-close">✕</button>
+    </div>
+    <div class="safety-body" id="safety-body"></div>
+  </div>
+</div>
+
+<!-- 写操作模态（记一笔/改/搬/取/未确认共用） -->
+<div class="wmodal-overlay" id="wmodal-overlay" hidden>
+  <div class="wmodal" id="wmodal" role="dialog" aria-modal="true" aria-labelledby="wmodal-title">
+    <div class="wmodal-hd"><b id="wmodal-title"></b><button class="wmodal-close" id="wmodal-close" aria-label="关闭">×</button></div>
+    <div class="wmodal-body" id="wmodal-body"></div>
+  </div>
+</div>
+
+<!-- 物品绑定 picker（记一笔认不出名字时） -->
+<div class="wmodal-overlay" id="picker-overlay" hidden style="z-index:650">
+  <div class="wmodal" role="dialog" aria-modal="true">
+    <div class="wmodal-hd"><b id="picker-title">绑定物品</b><button class="wmodal-close" id="picker-close" aria-label="关闭">×</button></div>
+    <div class="wmodal-body">
+      <div class="wfield sugg-wrap">
+        <input type="text" id="picker-q" placeholder="搜索物品名，或英文名 / #ID" autocomplete="off">
+      </div>
+      <div id="picker-results" style="margin-top:10px"></div>
+      <div class="wactions" style="margin-top:12px">
+        <button class="btn-ghost" id="picker-force">这批先按原名临时记录</button>
+        <button class="btn-ghost" id="picker-cancel">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ━━━━━ 配置（改这里） ━━━━━
+// 空 = 同源相对路径：页面由后端伺服，自动适应端口漂移和手机访问
+const CFG = { baseUrl: '' };
+
+// ━━━━━ 状态 ━━━━━
+const S = {
+  csrfToken: '', version: '', stale_days: 7, locations: [], characters: [],
+  character_count: 0, stock_rows: 0, total_qty: 0, pending_rows: 0,
+  q: '', account: '', character: '', location: '', hq: '', limit: 40, filterOpen: false,
+  phase: 'idle', items: [], truncated: false, total_items: 0, hint: '', selectedItemId: null,
+};
+
+// ━━━━━ 工具 ━━━━━
+const $ = id => document.getElementById(id);
+const fmtNum = n => n == null ? '—' : Number(n).toLocaleString('zh-CN');
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ━━━━━ API ━━━━━
+async function api(path) {
+  const res = await fetch(CFG.baseUrl + path);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || '请求失败');
+  return data;
+}
+
+// ━━━━━ 写请求 helper（CSRF 403 重试一次；网络异常不重试防重复入账） ━━━━━
+async function refreshCsrfToken() { try { const s = await api('/api/state'); S.csrfToken = s.csrf_token || ''; } catch (e) {} }
+async function postJSON(url, body, retried) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (S.csrfToken) headers['X-CSRF-Token'] = S.csrfToken;
+  let res;
+  try { res = await fetch(CFG.baseUrl + url, { method: 'POST', headers, body: JSON.stringify(body || {}), cache: 'no-store' }); }
+  catch (e) { return { ok: false, offline: true, error: '无法连接服务：若刚才提交过，请刷新页面核对是否已保存' }; }
+  if (res.status === 403 && !retried) { await refreshCsrfToken(); return postJSON(url, body, true); }
+  if (res.status === 413) return { ok: false, error: '提交内容过大，服务端已拒绝（413）；请拆分后再试' };
+  let data; try { data = await res.json(); } catch (e) { return { ok: false, error: `服务端返回异常（HTTP ${res.status}）` }; }
+  return data;
+}
+
+// ━━━━━ 模态系统（写操作表单共用） ━━━━━
+function openModal(title, bodyHTML, onMount, wide) {
+  closeModal();
+  $('wmodal-title').textContent = title;
+  $('wmodal-body').innerHTML = bodyHTML;
+  $('wmodal').classList.toggle('wide', !!wide);
+  $('wmodal-overlay').hidden = false;
+  if (onMount) onMount($('wmodal-body'), closeModal);
+  const first = $('wmodal-body').querySelector('input,select');
+  if (first) setTimeout(() => first.focus(), 30);
+}
+function closeModal() { $('wmodal-overlay').hidden = true; $('wmodal-body').innerHTML = ''; }
+
+// ━━━━━ 角色 / 位置 / 雇员下拉（记一笔·搬·未确认三处同步的唯一数据源） ━━━━━
+const ADD_RET = '__add_retainer__';
+let retainerMax = {};
+let retainerSlots = {};
+try { retainerSlots = JSON.parse(localStorage.getItem('retainerSlots') || '{}') || {}; } catch (e) {}
+function saveRetainerSlots() { try { localStorage.setItem('retainerSlots', JSON.stringify(retainerSlots)); } catch (e) {} }
+function currentSlots(cid) { return Math.max(2, Number(retainerMax[cid]) || 0, Number(retainerSlots[cid]) || 0); }
+function charOptionsHtml(withSuffix) {
+  return S.characters.map(c => `<option value="${c.id}">${escHtml(c.name)}@${escHtml(c.world)}${withSuffix ? `（${escHtml(c.account || '')}）· ${c.kinds || 0} 种` : ''}</option>`).join('');
+}
+function locationOptionsHtml(cid, extraSlot, withAdd) {
+  const slots = Math.min(10, Math.max(2, currentSlots(cid), extraSlot || 0));
+  const warehouses = (S.locations || []).filter(l => !/^雇员\d+$/.test(l));
+  const wh = (warehouses.length ? warehouses : ['背包', '鞍囊']).map(l => `<option value="${escHtml(l)}">${escHtml(l)}</option>`).join('');
+  let ret = '';
+  for (let i = 1; i <= slots; i++) ret += `<option value="雇员${i}">雇员${i}</option>`;
+  if (withAdd && slots < 10) ret += `<option value="${ADD_RET}">＋ 新增雇员${slots + 1}</option>`;
+  return `<optgroup label="角色仓库">${wh}</optgroup><optgroup label="雇员">${ret}</optgroup>`;
+}
+function learnRetainers(items) {
+  (items || []).forEach(it => (it.holders || []).forEach(h => {
+    const m = /^雇员(\d+)$/.exec(h.location || '');
+    if (m) retainerMax[h.character_id] = Math.max(Number(retainerMax[h.character_id]) || 0, Number(m[1]));
+  }));
+}
+
+// ━━━━━ 数量解析 / 三格换算（覆盖≠累加语义的基础） ━━━━━
+function qtyPerStack(stack) { return stack > 1 ? stack : 999; }
+function parseQty(raw, stack) {
+  const s = String(raw == null ? '' : raw).trim();
+  const m = /^(\d+)\s*组\s*(\d+)?$/.exec(s);
+  if (m) { if (stack === 1) return { ok: false, unstackable: true }; return { ok: true, qty: Number(m[1]) * qtyPerStack(stack) + Number(m[2] || 0) }; }
+  if (/^\d+$/.test(s)) return { ok: true, qty: Number(s) };
+  return { ok: false };
+}
+function fmtGroup(qty, stack) {
+  const per = qtyPerStack(stack);
+  if (!(stack > 1) || qty < per) return String(qty);
+  const g = Math.floor(qty / per), r = qty % per;
+  return g + '组' + (r ? r : '');
+}
+function syncThree(cfg, source) {
+  const per = qtyPerStack(cfg.stack), unstack = cfg.stack === 1;
+  const read = el => { const v = el.value.trim(); return /^\d+$/.test(v) ? Number(v) : null; };
+  if (source === 'total') {
+    const t = read(cfg.total);
+    if (t == null || unstack) { cfg.group.value = ''; cfg.rest.value = ''; }
+    else { const g = Math.floor(t / per), r = t % per; cfg.group.value = g || ''; cfg.rest.value = r || ''; cfg.restManual = false; }
+  } else {
+    if (source === 'group' && !cfg.restManual) cfg.rest.value = '';
+    if (source === 'rest') cfg.restManual = true;
+    const g = read(cfg.group) || 0, r = read(cfg.rest) || 0;
+    cfg.total.value = (g || r) ? String(g * per + r) : '';
+  }
+  const t = read(cfg.total);
+  if (cfg.hint) {
+    if (unstack) cfg.hint.textContent = t != null ? `不可堆叠，按件数记 · 占 ${t} 格` : '该物品不可堆叠，请直接填件数';
+    else if (t != null) { let h = `= ${t} 个 · 占 ${Math.ceil(t / per)} 格`; const r = read(cfg.rest); if (r != null && r >= per) h += '（余数超过一组，建议进位）'; cfg.hint.textContent = h; }
+    else cfg.hint.textContent = '';
+  }
+  return t;
+}
+
+// ━━━━━ 覆盖预览索引（来自最近搜索结果，与 V1 同限制） ━━━━━
+let qtyIndex = {};
+function buildQtyIndex(items) {
+  qtyIndex = {};
+  (items || []).forEach(it => (it.holders || []).forEach(h => { qtyIndex[`${h.character_id}|${h.location}|${it.name}|${h.hq ? 1 : 0}`] = h.qty; }));
+}
+function currentQtyForForm(cid, loc, name, hq) { return qtyIndex[`${cid}|${loc}|${name}|${hq ? 1 : 0}`]; }
+
+// ━━━━━ 写后统一刷新（收敛 V1 各操作不一致的刷新序列） ━━━━━
+async function refreshAfterWrite() {
+  try {
+    const st = await api('/api/state');
+    S.stock_rows = st.stock_rows || 0; S.total_qty = st.total_qty || 0; S.pending_rows = st.pending_rows || 0; S.character_count = st.character_count || 0;
+    if (st.retainer_max) for (const k in st.retainer_max) retainerMax[k] = Math.max(Number(retainerMax[k]) || 0, Number(st.retainer_max[k]));
+    $('stat-chars').textContent = S.character_count;
+    $('stat-rows').textContent = fmtNum(S.stock_rows); $('stat-qty').textContent = fmtNum(S.total_qty);
+    const b = $('btn-pending'); if (S.pending_rows > 0) { b.textContent = `未确认 ${S.pending_rows}`; b.hidden = false; } else b.hidden = true;
+  } catch (e) {}
+  await search();
+}
+
+// ━━━━━ Toast ━━━━━
+let toastTimer = null;
+function toast(msg, type = '') {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ━━━━━ 初始化 ━━━━━
+async function init() {
+  try {
+    const [st, ch] = await Promise.all([api('/api/state'), api('/api/characters')]);
+    S.csrfToken = st.csrf_token || ''; S.version = st.version || ''; S.stale_days = st.stale_days || 7;
+    S.locations = st.locations || []; S.characters = ch.characters || [];
+    if (st.retainer_max) for (const k in st.retainer_max) retainerMax[k] = Math.max(Number(retainerMax[k]) || 0, Number(st.retainer_max[k]));
+    S.character_count = st.character_count || 0; S.stock_rows = st.stock_rows || 0;
+    S.total_qty = st.total_qty || 0; S.pending_rows = st.pending_rows || 0;
+    $('top-version').textContent = 'v' + S.version;
+    $('stat-chars').textContent = S.character_count;
+    $('stat-rows').textContent = fmtNum(S.stock_rows);
+    $('stat-qty').textContent = fmtNum(S.total_qty);
+    if (S.pending_rows > 0) { const b = $('btn-pending'); b.textContent = `未确认 ${S.pending_rows}`; b.hidden = false; }
+    populateFilters();
+    $('config-overlay').hidden = true;
+    await search();
+  } catch (e) { showListError(e.message); }
+}
+
+function populateFilters() {
+  $('f-account').innerHTML = '<option value="">全部账号</option>';
+  $('f-character').innerHTML = '<option value="">全部角色</option>';
+  $('f-location').innerHTML = '<option value="">全部位置</option>';
+  const accounts = [...new Set(S.characters.map(c => c.account).filter(Boolean))];
+  accounts.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; $('f-account').append(o); });
+  S.characters.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = `${c.name}@${c.world}`; $('f-character').append(o); });
+  S.locations.forEach(l => { const o = document.createElement('option'); o.value = l; o.textContent = l; $('f-location').append(o); });
+  $('f-account').value = S.account; $('f-character').value = S.character; $('f-location').value = S.location;
+}
+
+// ━━━━━ 搜索 ━━━━━
+let searchTimer = null;
+function scheduleSearch(delay = 300) { clearTimeout(searchTimer); searchTimer = setTimeout(search, delay); }
+
+async function search() {
+  setPhase('loading');
+  const p = new URLSearchParams();
+  if (S.q) p.set('q', S.q);
+  if (S.account) p.set('account', S.account);
+  if (S.character) p.set('character', S.character);
+  if (S.location) p.set('location', S.location);
+  if (S.hq) p.set('hq', S.hq);
+  p.set('limit_items', String(S.limit));
+  try {
+    const d = await api('/api/search?' + p);
+    S.items = d.items || []; S.truncated = d.truncated || false;
+    buildQtyIndex(S.items); learnRetainers(S.items);
+    S.total_items = d.total_items || 0; S.hint = d.hint || '';
+    if (d.stats) {
+      S.stock_rows = d.stats.stock_rows || S.stock_rows; S.total_qty = d.stats.total_qty || S.total_qty;
+      $('stat-rows').textContent = fmtNum(S.stock_rows); $('stat-qty').textContent = fmtNum(S.total_qty);
+    }
+    setPhase(S.items.length === 0 ? 'empty' : 'ok');
+    renderList(); updateResultBar(); updateActiveChips();
+    batchLoadIcons(S.items);
+  } catch (e) { setPhase('error'); showListError(e.message); }
+}
+
+// ━━━━━ 图标批量加载 ━━━━━
+async function batchLoadIcons(items) {
+  if (!items.length) return;
+  const toFetch = [];
+  items.forEach(it => {
+    const icon = it.icon ? String(it.icon) : '';
+    const key = String(it.item_id);   // 统一按 item_id 作键，与 data-icon 一致
+    if (icon.startsWith('http') || icon.startsWith('/')) setIconEl(key, icon);
+    else toFetch.push(key);
+  });
+  if (!toFetch.length) return;
+  try {
+    const d = await api('/api/icons?ids=' + [...new Set(toFetch)].join(','));
+    for (const [id, url] of Object.entries(d.icons || {})) setIconEl(id, url);
+  } catch (_) {}
+}
+function setIconEl(iconId, url) {
+  document.querySelectorAll(`[data-icon="${iconId}"]`).forEach(img => { img.src = url; img.style.display = 'block'; });
+  document.querySelectorAll(`[data-icon-ph="${iconId}"]`).forEach(ph => { ph.hidden = true; });
+}
+
+// ━━━━━ 成本栏 + 内联改均价（POST /api/cost，给无批次旧库存设基线单价） ━━━━━
+function fmtAvg(v) { const n = Number(v) || 0; return n % 1 ? n.toFixed(1) : String(n); }
+function buildCostNote(it) {
+  const avg = Number(it.avg_cost) || 0, spent = Number(it.spent) || 0, count = Number(it.purchase_count) || 0;
+  if (count > 0) return `<span class="cost-note" data-batch="1" data-batch-name="${escHtml(it.name)}" data-batch-hq="${it.hq ? 1 : 0}" title="点击查看/删除采购批次">均 <b>${fmtAvg(avg)}</b> gil · ${count} 批 · 估值 ${fmtNum(spent)} ▾</span>`;
+  const attrs = `data-cost-edit="1" data-cost-name="${escHtml(it.name)}" data-cost-hq="${it.hq ? 1 : 0}" data-cost-avg="${avg}"`;
+  if (!avg) return `<span class="cost-note empty" ${attrs}>设成本 ⊕</span>`;
+  return `<span class="cost-note" ${attrs}>均 <b>${fmtAvg(avg)}</b> gil · 估值 ${fmtNum(spent)} ✎</span>`;
+}
+function startCostEdit(el) {
+  const name = el.dataset.costName || '', hq = Number(el.dataset.costHq) || 0, cur = Number(el.dataset.costAvg) || 0;
+  const prevHTML = el.innerHTML;
+  el.innerHTML = `<span class="cost-edit"><input class="inline-cost" type="text" inputmode="numeric" value="${cur || ''}" aria-label="单价"> gil</span>`;
+  const input = el.querySelector('input');
+  input.focus(); input.select();
+  let busy = false, done = false;
+  const restore = () => { if (done) return; done = true; el.innerHTML = prevHTML; };
+  const commit = async () => {
+    if (busy) return;
+    const price = Number(String(input.value).replace(/[,，\s]/g, ''));
+    if (!isFinite(price) || price < 0) { toast('单价填得不对', 'warn'); input.focus(); return; }
+    if (Math.round(price) === cur) { restore(); return; }
+    busy = true; input.disabled = true;
+    const res = await postJSON('/api/cost', { item_name: name, hq, unit_price: Math.round(price) });
+    busy = false;
+    if (!res.ok) { toast(res.error || '保存失败', 'warn'); input.disabled = false; input.focus(); return; }
+    toast(`已设成本：${name} 均 ${Math.round(price).toLocaleString('en-US')} gil`);
+    done = true;
+    refreshAfterWrite();
+  };
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { e.preventDefault(); restore(); } });
+  input.addEventListener('blur', () => { if (!busy) restore(); });
+}
+
+// ━━━━━ 采购批次管理（查看 / 删批次；改价＝删基线＋重设成本） ━━━━━
+async function openBatches(name, hq) {
+  let data;
+  try { data = await api('/api/purchase?item_name=' + encodeURIComponent(name) + '&hq=' + hq); }
+  catch (e) { toast('批次读取失败：' + e.message, 'warn'); return; }
+  const rows = data.rows || [];
+  const body = rows.length ? rows.map(r => `
+    <div class="wrow" style="align-items:center;border-bottom:1px solid var(--line);padding:6px 0">
+      <div style="flex:1;min-width:0;font-size:12px">${r.location === '基线' ? '<span class="kind-tag">基线</span> ' : ''}${fmtNum(r.qty)} 个 × ${fmtNum(r.unit_price)} gil<div class="hintline">${escHtml(r.date_text || '')}${r.location && r.location !== '基线' ? ' · ' + escHtml(r.location) : ''} · 小计 ${fmtNum(r.cost)} gil</div></div>
+      <button class="btn-mini danger" data-del-batch="${r.id}">删</button>
+    </div>`).join('') : '<div class="hintline">没有采购批次。</div>';
+  openModal(`采购批次 · ${name}${hq ? '（HQ）' : ''}`, `
+    <div class="wform">
+      <div class="hintline">共 ${data.count} 批 · 加权均价 ${fmtAvg(data.avg_cost)} gil · 总估值 ${fmtNum(data.total_cost)} gil</div>
+      ${body}
+      <div class="hintline">删掉「基线」批次后可重新设成本；删除真实采购批次会改变加权均价。</div>
+      <div class="wactions"><button class="btn-ghost" id="batch-close">关闭</button></div>
+    </div>`, (b, close) => {
+    $('batch-close').addEventListener('click', close);
+    b.querySelectorAll('[data-del-batch]').forEach(btn => btn.addEventListener('click', async () => {
+      if (btn.dataset.armed === '1') {
+        btn.disabled = true;
+        const res = await postJSON('/api/purchase/delete', { id: Number(btn.dataset.delBatch) });
+        btn.disabled = false;
+        if (!res.ok) { toast(res.error || '删除失败', 'warn'); btn.dataset.armed = ''; btn.classList.remove('armed'); btn.textContent = '删'; return; }
+        toast('已删除批次');
+        refreshAfterWrite(); openBatches(name, hq);
+      } else {
+        btn.dataset.armed = '1'; btn.classList.add('armed'); btn.textContent = '确认';
+        toast('再点一次确认删除该批次（3 秒内）', 'warn');
+        setTimeout(() => { if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.classList.remove('armed'); btn.textContent = '删'; } }, 3000);
+      }
+    }));
+  }, true);
+}
+
+// ━━━━━ 渲染列表 ━━━━━
+function setPhase(phase) { S.phase = phase; }
+function renderList() {
+  const el = $('item-list');
+  if (S.phase === 'loading') { el.innerHTML = skeletonHTML(8); return; }
+  if (S.phase === 'error') return;
+  if (S.phase === 'empty') { el.innerHTML = emptyHTML(); return; }
+  el.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  S.items.forEach(it => frag.append(buildItemCard(it)));
+  if (S.truncated) {
+    const w = document.createElement('div'); w.className = 'truncated-hint';
+    w.innerHTML = `仅显示前 ${S.items.length} 种，共 ${fmtNum(S.total_items)} 种。<a id="btn-load-more">加载全部（最多 200）</a>`;
+    frag.append(w);
+  }
+  el.append(frag);
+}
+
+function buildItemCard(it) {
+  const hasStale = it.holders && it.holders.some(h => h.stale);
+  const stackWarn = it.stack && it.holders && it.holders.some(h => h.qty >= it.stack);
+  const cardId = `${it.item_id}-${it.hq ? 'hq' : 'nq'}`;
+  const isSelected = cardId === S.selectedItemId;
+  const expanded = document.querySelector(`.item-card[data-id="${cardId}"]`)?.classList.contains('expanded');
+  const holderCount = it.holders ? it.holders.length : 0; const iconId = it.item_id;
+  const card = document.createElement('div');
+  card.className = `item-card${isSelected ? ' selected' : ''}${stackWarn ? ' warn-stack' : ''}${expanded ? ' expanded' : ''}`;
+  card.dataset.id = cardId;
+  const hqBadge = it.hq ? `<span class="badge-hq">HQ</span>` : '';
+  const alias = it.aliases && it.aliases.length ? `<div class="item-alias">${escHtml(it.aliases.slice(0,2).join(' · '))}</div>` : '';
+  const staleDot = hasStale ? `<span class="stale-indicator" title="有持有者数据较旧"></span>` : '';
+  const qtyClass = hasStale ? 'item-qty stale' : 'item-qty';
+  card.innerHTML = `<div class="item-main" data-action="select" data-id="${cardId}">
+    <div class="item-icon-wrap">
+      <div class="item-icon-placeholder" data-icon-ph="${iconId}">◈</div>
+      <img data-icon="${iconId}" src="" alt="" loading="lazy" style="display:none">
+    </div>
+    <div class="item-info">
+      <div class="item-name-row"><span class="item-name">${escHtml(it.name)}</span>${hqBadge}</div>
+      ${alias}
+      ${buildCostNote(it)}
+    </div>
+    <div class="item-meta"><span>${holderCount} 处</span>${staleDot}</div>
+    <div class="${qtyClass}">${fmtNum(it.total)}</div>
+    <button class="expand-btn" data-action="expand" data-id="${cardId}" title="展开">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+  <div class="holder-list" ${expanded ? '' : 'hidden'}>
+    ${(it.holders || []).map(h => buildHolderRow(h, it)).join('')}
+  </div>`;
+  return card;
+}
+
+function buildHolderRow(h, it) {
+  const ageClass = h.stale ? 'holder-age stale' : 'holder-age';
+  const hqBadge = h.hq ? `<span class="holder-hq-badge">HQ</span>` : '';
+  const stackWarn = it.stack && h.qty >= it.stack ? `<span style="color:var(--warn);font-size:11px" title="已达叠加上限">⚠</span>` : '';
+  const da = `data-sid="${h.stock_id}" data-cid="${h.character_id}" data-name="${escHtml(it.name)}" data-loc="${escHtml(h.location)}" data-qty="${h.qty}" data-hq="${h.hq ? 1 : 0}" data-stack="${it.stack || 0}"`;
+  return `<div class="holder-row">
+    <div class="holder-info">
+      <div class="holder-char">${escHtml(h.character)}@${escHtml(h.world)} ${hqBadge}</div>
+      <div class="holder-loc">${escHtml(h.location)}</div>
+    </div>
+    <div class="holder-qty-cell">${fmtNum(h.qty)} ${stackWarn}</div>
+    <div class="${ageClass}">${escHtml(h.age_text || '')}</div>
+    <div class="holder-ops">
+      <button class="btn-mini" data-action="edit" ${da}>改</button>
+      <button class="btn-mini" data-action="move" ${da}>搬</button>
+      <button class="btn-mini" data-action="take" ${da}>取</button>
+      <button class="btn-mini danger" data-action="del" ${da}>删</button>
+    </div>
+  </div>`;
+}
+
+function skeletonHTML(n) {
+  return Array.from({length: n}, () => `<div class="skeleton-row">
+    <div class="skeleton skeleton-icon"></div><div class="skeleton skeleton-text"></div>
+    <div style="flex:1"></div><div class="skeleton skeleton-qty"></div></div>`).join('');
+}
+
+function emptyHTML() {
+  const hints = { no_stock: '物品库中有，但库存里没有', no_item: '物品库中也找不到', '': '没有符合条件的记录' };
+  const msg = hints[S.hint] || hints[''];
+  return `<div class="state-empty">
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+      <path d="M8 40L24 8L40 40H8Z" stroke="currentColor" stroke-width="2" fill="none"/>
+      <path d="M24 24v6M24 34v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg><div>库存为空</div><div style="font-size:12px">${escHtml(msg)}</div></div>`;
+}
+
+function showListError(msg) {
+  $('item-list').innerHTML = `<div class="state-error">
+    <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+      <circle cx="20" cy="20" r="17" stroke="currentColor" stroke-width="2"/>
+      <path d="M20 12v10M20 26v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg><div>连接失败</div><div style="font-size:12px;max-width:300px">${escHtml(msg)}</div>
+    <button class="btn-ghost" onclick="init()">重试</button></div>`;
+}
+
+function updateResultBar() {
+  const bar = $('result-bar'); const txt = $('result-text');
+  const hasFilter = S.q || S.account || S.character || S.location || S.hq;
+  if (S.items.length > 0) { txt.textContent = `${fmtNum(S.total_items)} 种材料`; bar.hidden = false; }
+  else { bar.hidden = !hasFilter; }
+}
+
+function updateActiveChips() {
+  const chips = $('active-chips');
+  const defs = [
+    { key: 'q', label: () => `"${S.q}"` },
+    { key: 'account', label: () => `账号: ${S.account}` },
+    { key: 'character', label: () => {
+      const c = S.characters.find(x => String(x.id) === S.character);
+      return c ? `角色: ${c.name}` : `角色: ${S.character}`;
+    }},
+    { key: 'location', label: () => `位置: ${S.location}` },
+    { key: 'hq', label: () => S.hq === '1' ? '仅 HQ' : '仅 NQ' },
+  ];
+  chips.innerHTML = defs.filter(d => S[d.key]).map(d => `<span class="filter-chip">
+    ${escHtml(d.label())}<button data-clear="${d.key}" title="清除">×</button></span>`).join('');
+}
+
+// ━━━━━ 详情面板 ━━━━━
+function selectItem(cardId) {
+  S.selectedItemId = cardId;
+  document.querySelectorAll('.item-card').forEach(c => c.classList.toggle('selected', c.dataset.id === cardId));
+  const it = S.items.find(i => `${i.item_id}-${i.hq ? 'hq' : 'nq'}` === cardId);
+  if (!it) return;
+  const html = buildDetailHTML(it);
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile) { $('drawer-body').innerHTML = html; openDrawer(); }
+  else { $('detail-empty').hidden = true; $('detail-content').hidden = false; $('detail-content').innerHTML = html; }
+  batchLoadIcons([it]);
+}
+
+function buildDetailHTML(it) {
+  const iconId = it.item_id;
+  const hqBadge = it.hq ? `<span class="badge-hq">HQ</span>` : '';
+  const holderHTML = (it.holders || []).map(h => {
+    const ageClass = h.stale ? 'dh-age stale' : 'dh-age';
+    const hqBadge2 = h.hq ? `<span class="badge-hq" style="font-size:10px">HQ</span>` : '';
+    const stackWarn = it.stack && h.qty >= it.stack ? `<span style="color:var(--warn)"> ⚠</span>` : '';
+    const da = `data-sid="${h.stock_id}" data-cid="${h.character_id}" data-name="${escHtml(it.name)}" data-loc="${escHtml(h.location)}" data-qty="${h.qty}" data-hq="${h.hq ? 1 : 0}" data-stack="${it.stack || 0}"`;
+    return `<div class="detail-holder-row">
+      <div class="dh-top"><div class="dh-char">${escHtml(h.character)}@${escHtml(h.world)} ${hqBadge2}</div>
+      <div class="dh-qty">${fmtNum(h.qty)}${stackWarn}</div></div>
+      <div class="dh-loc-age"><span>${escHtml(h.location)}</span><span class="${ageClass}">${escHtml(h.age_text || '')}</span></div>
+      <div class="dh-ops">
+        <button class="btn-mini" data-action="edit" ${da}>改数量/位置</button>
+        <button class="btn-mini" data-action="take" ${da}>取出</button>
+        <button class="btn-mini danger" data-action="del" ${da}>删除</button>
+      </div></div>`;
+  }).join('');
+  const costHTML = it.avg_cost ? `<div class="detail-section">
+    <div class="detail-section-title">成本</div>
+    <div class="cost-row"><span class="label">加权均价</span><span class="value">${fmtNum(Math.round(it.avg_cost))} gil</span></div>
+    ${it.spent ? `<div class="cost-row"><span class="label">总价值</span><span class="value">${fmtNum(Math.round(it.spent))} gil</span></div>` : ''}
+    ${it.purchase_count ? `<div class="cost-row"><span class="label">采购批次</span><span class="value">${it.purchase_count}</span></div>` : ''}
+  </div>` : '';
+  return `<div class="detail-head">
+    <div class="detail-icon-wrap">
+      <div class="item-icon-placeholder" data-icon-ph="${iconId}" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:24px;background:linear-gradient(135deg,#2a7180,#1a4a56);color:rgba(255,255,255,.6)">◈</div>
+      <img data-icon="${iconId}" src="" alt="" loading="lazy" style="display:none">
+    </div>
+    <div style="flex:1">
+      <div class="detail-name">${escHtml(it.name)} ${hqBadge}</div>
+      <div class="detail-sub">#${it.item_id}${it.stack ? ` · 叠加上限 ${it.stack}` : ''}${it.aliases?.length ? ` · ${escHtml(it.aliases.join(' / '))}` : ''}</div>
+      <div class="detail-total">${fmtNum(it.total)}</div>
+    </div>
+  </div>
+  <div class="detail-actions">
+    <button class="btn-primary" data-action="record">记一笔</button>
+    <button class="btn-ghost" data-action="set-safety">⚠️ 安全线</button>
+  </div>
+  <div class="detail-safety-form" id="detail-safety-form" hidden>
+    <div style="padding:16px;border-top:1px solid var(--line)">
+      <div style="margin-bottom:12px;font-weight:500">设置最低库存</div>
+      <input type="number" id="detail-safety-qty" placeholder="例如: 100" min="0" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:4px;font-size:14px;margin-bottom:12px">
+      <div style="display:flex;gap:8px">
+        <button class="btn-ghost" id="detail-safety-cancel" style="flex:1">取消</button>
+        <button class="btn-primary" id="detail-safety-confirm" style="flex:1">确定</button>
+      </div>
+    </div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">持有者 (${(it.holders || []).length})</div>
+    ${holderHTML || '<div style="color:var(--muted);font-size:13px">无持有记录</div>'}
+  </div>${costHTML}`;
+}
+
+function openDrawer() { $('drawer-mask').hidden = false; $('detail-drawer').classList.add('open'); }
+function closeDrawer() { $('detail-drawer').classList.remove('open'); $('drawer-mask').hidden = true; }
+
+// ━━━━━ 事件委托 ━━━━━
+document.addEventListener('click', e => {
+  const costEl = e.target.closest('[data-cost-edit]');
+  if (costEl) { if (!costEl.querySelector('input')) startCostEdit(costEl); return; }
+  const batchEl = e.target.closest('[data-batch]');
+  if (batchEl) { openBatches(batchEl.dataset.batchName, Number(batchEl.dataset.batchHq)); return; }
+  const btn = e.target.closest('[data-action]');
+  if (!btn) {
+    const clearBtn = e.target.closest('[data-clear]');
+    if (clearBtn) {
+      const key = clearBtn.dataset.clear; S[key] = '';
+      const selMap = { account: 'f-account', character: 'f-character', location: 'f-location', hq: 'f-hq' };
+      if (selMap[key]) $(selMap[key]).value = '';
+      if (key === 'q') $('q-input').value = '';
+      scheduleSearch(0);
+    }
+    return;
+  }
+  const action = btn.dataset.action;
+  if (action === 'select') { selectItem(btn.dataset.id); return; }
+  if (action === 'expand') {
+    e.stopPropagation(); const id = btn.dataset.id;
+    const card = document.querySelector(`.item-card[data-id="${id}"]`);
+    if (!card) return;
+    const isExpanded = card.classList.toggle('expanded');
+    card.querySelector('.holder-list').hidden = !isExpanded;
+    return;
+  }
+  if (action === 'record') { const it = S.items.find(i => `${i.item_id}-${i.hq ? 'hq' : 'nq'}` === S.selectedItemId); openRecord(it ? { item_name: it.name, stack: it.stack } : null); return; }
+  if (action === 'edit') { openEdit(btn); return; }
+  if (action === 'move') { openMove(btn); return; }
+  if (action === 'take') { openTake(btn); return; }
+  if (action === 'del') { deleteRow(btn); return; }
+  if (action === 'set-safety') {
+    const form = $('detail-safety-form');
+    form.hidden = !form.hidden;
+    if (!form.hidden) $('detail-safety-qty').focus();
+    return;
+  }
+});
+
+// 搜索框 placeholder 根据屏幕宽度调整
+function updateSearchPlaceholder() {
+  $('q-input').placeholder = window.innerWidth <= 480 ? '搜索材料、角色…' : '搜索材料名、角色或位置…';
+}
+updateSearchPlaceholder();
+window.addEventListener('resize', updateSearchPlaceholder);
+
+$('q-input').addEventListener('input', e => { S.q = e.target.value.trim(); $('btn-clear-q').hidden = !S.q; scheduleSearch(); });
+$('q-input').addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(searchTimer); search(); } });
+$('btn-clear-q').addEventListener('click', () => { S.q = ''; $('q-input').value = ''; $('btn-clear-q').hidden = true; scheduleSearch(0); });
+$('btn-toggle-filter').addEventListener('click', () => {
+  S.filterOpen = !S.filterOpen; $('filter-expanded').hidden = !S.filterOpen;
+  $('btn-toggle-filter').textContent = S.filterOpen ? '收起' : '筛选';
+});
+['f-account','f-character','f-location','f-hq'].forEach(id => {
+  const keyMap = { 'f-account': 'account', 'f-character': 'character', 'f-location': 'location', 'f-hq': 'hq' };
+  $(id).addEventListener('change', e => { S[keyMap[id]] = e.target.value; scheduleSearch(0); });
+});
+$('btn-clear-filters').addEventListener('click', () => {
+  S.q = ''; S.account = ''; S.character = ''; S.location = ''; S.hq = '';
+  $('q-input').value = ''; $('btn-clear-q').hidden = true;
+  ['f-account','f-character','f-location','f-hq'].forEach(id => $(id).value = '');
+  scheduleSearch(0);
+});
+$('item-list').addEventListener('click', e => { if (e.target.id === 'btn-load-more') { S.limit = 200; scheduleSearch(0); } });
+$('btn-undo').addEventListener('click', quickUndo);
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    e.preventDefault(); quickUndo();
+  }
+  if (e.key === 'Escape' && undoArmed) disarmUndo();
+});
+$('btn-export').addEventListener('click', async () => {
+  try {
+    const d = await api('/api/stock/export');
+    const blob = new Blob(['\uFEFF' + d.csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    a.href = url; a.download = 'ff14-stock.csv'; a.click(); URL.revokeObjectURL(url);
+    toast('CSV 导出成功');
+  } catch (e) { toast('导出失败: ' + e.message, 'warn'); }
+});
+$('btn-pending').addEventListener('click', openPending);
+$('btn-record').addEventListener('click', () => openRecord());
+$('btn-batch').addEventListener('click', openBatch);
+$('btn-chars').addEventListener('click', openCharacters);
+$('btn-settings').addEventListener('click', () => { $('config-url').value = CFG.baseUrl || location.origin; $('config-overlay').hidden = false; });
+$('drawer-mask').addEventListener('click', closeDrawer);
+$('config-confirm').addEventListener('click', () => {
+  const val = $('config-url').value.trim().replace(/\/$/, '');
+  // 留空或填当前地址 = 回到同源相对路径
+  CFG.baseUrl = (!val || val === location.origin) ? '' : val;
+  $('config-overlay').hidden = true; $('item-list').innerHTML = ''; init();
+});
+$('config-url').addEventListener('keydown', e => { if (e.key === 'Enter') $('config-confirm').click(); });
+
+// ━━━━━ 安全线（设置 / 删除 / 列表） ━━━━━
+async function setSafetyLine(itemId, minQty) {
+  const res = await postJSON('/api/stock/safety-line', { item_id: itemId, min_qty: minQty });
+  if (!res.ok) { toast(res.error || '设置失败', 'warn'); return; }
+  toast('安全线已设置'); loadSafetyLines();
+}
+async function deleteSafetyLine(itemId) {
+  const res = await postJSON('/api/stock/safety-line/delete', { item_id: itemId });
+  if (!res.ok) { toast(res.error || '删除失败', 'warn'); return; }
+  toast('安全线已移除'); loadSafetyLines();
+}
+
+async function loadSafetyLines() {
+  try {
+    renderSafetyModal(await api('/api/stock/safety-lines'));
+  } catch (e) {
+    toast(e.message, 'warn');
+  }
+}
+
+function renderSafetyModal(data) {
+  const lines = data.lines || [];
+  $('safety-stats').textContent = `${lines.length} 条`
+    + (data.low_count ? ` · ${data.low_count} 条低于安全线` : '')
+    + (data.unresolved ? ` · ${data.unresolved} 条物品未收录` : '');
+  const list = $('safety-body');
+  if (!lines.length) {
+    list.innerHTML = '<div class="safety-empty">暂无安全线设置</div>';
+    return;
+  }
+  list.innerHTML = lines.map(ln => {
+    const status = ln.status === 'ok' ? 'ok' : ln.status === 'low' ? 'low' : 'empty';
+    const statusIcon = status === 'ok' ? '✓' : status === 'low' ? '⚠' : '✕';
+    return `
+      <div class="safety-item">
+        <div class="safety-icon-wrap">
+          <div class="item-icon-placeholder" data-icon-ph="${ln.item_id}">◈</div>
+          <img data-icon="${ln.item_id}" src="" alt="" style="display:none">
+        </div>
+        <div class="safety-info">
+          <div class="safety-name">${escHtml(ln.name)}</div>
+          <div class="safety-nums">
+            <span>当前 <span class="current">${fmtNum(ln.current_qty)}</span></span>
+            <span>安全线 <span class="current">${fmtNum(ln.min_qty)}</span></span>
+            ${ln.short_qty > 0 ? `<span style="color:var(--danger)">缺口 ${fmtNum(ln.short_qty)}</span>` : ''}
+          </div>
+        </div>
+        <div class="safety-status ${status}" title="${status === 'ok' ? '充足' : status === 'low' ? '偏低' : '无库存'}">${statusIcon}</div>
+        <button class="btn-mini danger" onclick="deleteSafetyLine(${ln.item_id})">移除</button>
+      </div>
+    `;
+  }).join('');
+  batchLoadIcons(lines);
+}
+
+$('btn-safety').addEventListener('click', () => {
+  $('safety-overlay').hidden = false;
+  loadSafetyLines();
+});
+$('safety-close').addEventListener('click', () => {
+  $('safety-overlay').hidden = true;
+});
+
+// 详情面板安全线设置（事件委托）
+const handleSafetyClick = async (e) => {
+  if (e.target.id === 'detail-safety-cancel') {
+    $('detail-safety-form').hidden = true;
+  } else if (e.target.id === 'detail-safety-confirm') {
+    const it = S.items.find(i => `${i.item_id}-${i.hq ? 'hq' : 'nq'}` === S.selectedItemId);
+    if (!it) return;
+    if (!it.item_id) { toast('未绑定物品无法设置安全线', 'warn'); return; }
+    const qty = parseInt($('detail-safety-qty').value, 10);
+    if (isNaN(qty) || qty <= 0) { toast('安全线必须是正整数', 'warn'); return; }
+    await setSafetyLine(it.item_id, qty);
+    $('detail-safety-form').hidden = true;
+    $('detail-safety-qty').value = '';
+  }
+};
+$('detail-content').addEventListener('click', handleSafetyClick);
+$('detail-drawer').addEventListener('click', handleSafetyClick);
+
+// ━━━━━ 记一笔（POST /api/stock；覆盖≠累加） ━━━━━
+let recMode = 'set';
+try { recMode = localStorage.getItem('recStockMode') === 'add' ? 'add' : 'set'; } catch (e) {}
+let recStack = 0, pendingSave = null;
+let recSugTimer = null, recSugItems = [], recSugIndex = -1, recSugSeq = 0, recComposing = false;
+
+function recEls() {
+  return { char: $('rec-character'), item: $('rec-item'), loc: $('rec-location'), total: $('rec-total'), group: $('rec-group'), rest: $('rec-rest'), price: $('rec-price'), hq: $('rec-hq'), hint: $('rec-hint'), qtyHint: $('rec-qty-hint'), cost: $('rec-cost') };
+}
+function readPriceInput() { const v = Number(String($('rec-price').value).replace(/[,，\s]/g, '')); return isFinite(v) && v > 0 ? Math.round(v) : 0; }
+function decorateOverwrite() {
+  const e = recEls(); if (!e.char || !e.hint) return;
+  const name = e.item.value.trim(); const t = parseQty(e.total.value, recStack);
+  if (!name || !t.ok) { e.hint.textContent = ''; e.hint.className = 'hintline'; return; }
+  const n = t.qty, cur = currentQtyForForm(e.char.value, e.loc.value, name, e.hq.checked);
+  let txt = '', warn = false;
+  if (recMode === 'add') txt = cur == null ? ` ｜ 将新增 ${n}` : ` ｜ 加后 ${cur} → ${cur + n}（+${n}）`;
+  else if (cur == null) txt = ` ｜ 将新增 ${n}`;
+  else if (cur === n) txt = ' ｜ 与现有数量相同';
+  else { txt = ` ｜ 将覆盖 ${cur} → ${n}（${n - cur > 0 ? '+' : ''}${n - cur}）`; warn = n < cur; }
+  e.hint.textContent = txt; e.hint.className = 'hintline' + (warn ? ' warn' : '');
+}
+function updateCostPreview() {
+  const e = recEls(); if (!e.cost) return;
+  const p = readPriceInput();
+  if (!p) { e.cost.textContent = '—'; e.cost.className = 'hintline'; return; }
+  const t = parseQty(e.total.value, recStack); const n = t.ok ? t.qty : 0;
+  if (n <= 0) { e.cost.textContent = '先填数量'; e.cost.className = 'hintline'; return; }
+  const cur = currentQtyForForm(e.char.value, e.loc.value, e.item.value.trim(), e.hq.checked) || 0;
+  const added = recMode === 'add' ? n : n - cur;
+  if (added <= 0) { e.cost.textContent = '数量没增加 · 成本不计入'; e.cost.className = 'hintline bad'; return; }
+  e.cost.textContent = `本次 ${added} × ${p} = ${(added * p).toLocaleString('en-US')} gil`; e.cost.className = 'hintline';
+}
+function showRecError(msg) { const el = $('rec-error'); if (!el) { toast(msg, 'warn'); return; } $('rec-error-text').textContent = msg; el.hidden = false; }
+
+function openRecord(prefill) {
+  if (!S.characters.length) { toast('先添加一个角色', 'warn'); openAddCharacter(); return; }
+  let lastChar = null, lastLoc = null;
+  try { lastChar = localStorage.getItem('recChar'); lastLoc = localStorage.getItem('recLoc'); } catch (e) {}
+  const cid0 = (prefill && prefill.character_id) || (S.characters.some(c => String(c.id) === lastChar) ? lastChar : S.characters[0].id);
+  const html = `
+    <div class="wform">
+      <div class="wfield"><label>角色 / 仓库</label><select id="rec-character">${charOptionsHtml(true)}</select></div>
+      <div class="wfield sugg-wrap"><label>材料名（须匹配物品库）</label><input type="text" id="rec-item" placeholder="例如：黑铁锭" autocomplete="off"><div class="sugg-list" id="rec-sugg" hidden></div></div>
+      <div class="wfield"><label>位置</label><div class="wrow" style="align-items:center"><select id="rec-location" style="flex:1"></select><button class="btn-ghost loc-del-btn" id="rec-loc-del" type="button" hidden>删栏位</button></div><div class="hintline" id="loc-del-hint"></div></div>
+      <div class="wfield"><label id="rec-qty-label">数量（改完后的总数）</label>
+        <div class="qty-mode" style="margin-bottom:6px"><button type="button" data-qmode="set">改成</button><button type="button" data-qmode="add">加上</button></div>
+        <div class="qty-three"><input type="text" inputmode="numeric" id="rec-total" class="qt-total" placeholder="如 1523"><input type="text" inputmode="numeric" id="rec-group" class="qt-part" placeholder="组"><span class="unit">组</span><input type="text" inputmode="numeric" id="rec-rest" class="qt-part" placeholder="余"><span class="unit">余</span></div>
+        <div class="hintline" id="rec-qty-hint"></div>
+      </div>
+      <div class="wfield"><label>买入单价（可空，填了才计入成本）</label><input type="text" inputmode="numeric" id="rec-price" placeholder="gil / 个"><div class="hintline" id="rec-cost">—</div></div>
+      <label class="wcheck"><input type="checkbox" id="rec-hq"> HQ（高质量）</label>
+      <div class="hintline" id="rec-hint"></div>
+      <div class="form-error" id="rec-error" hidden><span class="msg" id="rec-error-text"></span><button id="rec-error-retry">重试</button><button id="rec-error-close">×</button></div>
+      <div class="wactions"><button class="btn-primary" id="rec-save">保存（自动刷新）</button></div>
+    </div>`;
+  openModal('记一笔', html, (body) => {
+    const e = recEls();
+    e.char.value = cid0;
+    const locDelBtn = $('rec-loc-del');
+    let locDelArmed = false, locDelTimer = null;
+    const updateLocDel = () => {
+      locDelBtn.hidden = !/^雇员\d+$/.test(e.loc.value);
+      locDelArmed = false; clearTimeout(locDelTimer); locDelBtn.classList.remove('armed'); locDelBtn.textContent = '删栏位';
+      $('loc-del-hint').textContent = ''; $('loc-del-hint').className = 'hintline';
+    };
+    const rebuildLoc = (keep) => {
+      e.loc.innerHTML = locationOptionsHtml(e.char.value, 0, true);
+      const want = keep || lastLoc;
+      e.loc.value = (want && [...e.loc.options].some(o => o.value === want)) ? want : '背包';
+      try { localStorage.setItem('recLoc', e.loc.value); } catch (err) {}
+      updateLocDel();
+    };
+    rebuildLoc(prefill && prefill.location);
+    if (prefill && prefill.item_name) { e.item.value = prefill.item_name; recStack = prefill.stack || 0; }
+    const cfg = { total: e.total, group: e.group, rest: e.rest, hint: e.qtyHint, stack: recStack, restManual: false };
+    const sync = (src) => { cfg.stack = recStack; syncThree(cfg, src); decorateOverwrite(); updateCostPreview(); };
+    const applyMode = () => {
+      body.querySelectorAll('[data-qmode]').forEach(b => b.classList.toggle('on', b.dataset.qmode === recMode));
+      $('rec-qty-label').textContent = recMode === 'set' ? '数量（改完后的总数）' : '要加的数量（会累加）';
+    };
+    applyMode();
+    body.querySelectorAll('[data-qmode]').forEach(b => b.addEventListener('click', () => { recMode = b.dataset.qmode; try { localStorage.setItem('recStockMode', recMode); } catch (err) {} applyMode(); decorateOverwrite(); updateCostPreview(); }));
+    e.total.addEventListener('input', () => sync('total'));
+    e.group.addEventListener('input', () => sync('group'));
+    e.rest.addEventListener('input', () => sync('rest'));
+    e.char.addEventListener('change', () => { try { localStorage.setItem('recChar', e.char.value); } catch (err) {} rebuildLoc(); decorateOverwrite(); updateCostPreview(); });
+    e.loc.addEventListener('change', () => {
+      if (e.loc.value === ADD_RET) { const cid = e.char.value, next = Math.min(10, currentSlots(cid) + 1); retainerSlots[cid] = next; saveRetainerSlots(); rebuildLoc('雇员' + next); }
+      else { try { localStorage.setItem('recLoc', e.loc.value); } catch (err) {} }
+      updateLocDel(); decorateOverwrite(); updateCostPreview();
+    });
+    locDelBtn.addEventListener('click', async () => {
+      const cid = e.char.value, loc = e.loc.value;
+      if (!locDelArmed) {
+        locDelArmed = true; locDelBtn.classList.add('armed'); locDelBtn.textContent = '确认删除';
+        toast('再点一次确认：库存会转入「未确认库存」，之后可以转移或丢弃', 'warn');
+        $('loc-del-hint').textContent = '正在读取这个位置的库存…';
+        try {
+          const chr = S.characters.find(c => String(c.id) === cid);
+          const d = await api('/api/search?character=' + encodeURIComponent(chr ? chr.name : '') + '&location=' + encodeURIComponent(loc) + '&limit_items=200');
+          const seen = {}; let total = 0; const names = [];
+          (d.items || []).forEach(it => (it.holders || []).forEach(h => { if (h.location === loc && !seen[h.stock_id]) { seen[h.stock_id] = 1; total += h.qty; if (names.length < 3) names.push(`${it.name} ${h.qty}`); } }));
+          const cnt = Object.keys(seen).length;
+          $('loc-del-hint').textContent = cnt ? `里面有 ${cnt} 笔：${names.join('、')}${cnt > 3 ? ' 等' : ''}（共 ${total} 件），会全部转入未确认。` : '这个位置没有库存，再点一次只会移除空栏位。';
+          $('loc-del-hint').className = 'hintline' + (cnt ? ' warn' : '');
+        } catch (err) { $('loc-del-hint').textContent = ''; }
+        locDelTimer = setTimeout(updateLocDel, 3000);
+        return;
+      }
+      clearTimeout(locDelTimer); locDelBtn.disabled = true;
+      const res = await postJSON('/api/location/delete', { character_id: Number(cid), location: loc });
+      locDelBtn.disabled = false;
+      if (!res.ok) { toast(res.error || '删除失败', 'warn'); updateLocDel(); return; }
+      toast(`「${loc}」的 ${res.rows} 行 / ${res.qty} 件已转入未确认` + (res.snapshot ? `（快照 ${res.snapshot}）` : ''));
+      const m = /^雇员(\d+)$/.exec(loc);
+      if (m && Number(m[1]) >= 3) { retainerSlots[cid] = Math.max(2, Number(m[1]) - 1); saveRetainerSlots(); }
+      rebuildLoc('背包');
+      refreshAfterWrite();
+    });
+    const sugg = $('rec-sugg');
+    const renderSug = () => {
+      if (!recSugItems.length) { sugg.hidden = true; sugg.innerHTML = ''; return; }
+      sugg.innerHTML = recSugItems.map((it, i) => `<div class="row${i === recSugIndex ? ' active' : ''}" data-sug="${i}"><span>${escHtml(it.name)}${it.matched_alias ? ` <span class="al">备注:${escHtml(it.matched_alias)}</span>` : ''}</span><span class="id">#${it.id}</span></div>`).join('');
+      sugg.hidden = false;
+    };
+    const searchSug = async (q) => { const seq = ++recSugSeq; try { const d = await api('/api/item_search?q=' + encodeURIComponent(q)); if (seq !== recSugSeq) return; recSugItems = (d.items || []).slice(0, 8); recSugIndex = -1; renderSug(); } catch (err) {} };
+    const chooseSug = (i) => { const it = recSugItems[i]; if (!it) return; e.item.value = it.name; recStack = it.stack || 0; sugg.hidden = true; sync('total'); e.total.focus(); };
+    e.item.addEventListener('compositionstart', () => recComposing = true);
+    e.item.addEventListener('compositionend', () => { recComposing = false; recStack = 0; const q = e.item.value.trim(); if (q) searchSug(q); });
+    e.item.addEventListener('input', () => { if (recComposing) return; recStack = 0; clearTimeout(recSugTimer); const q = e.item.value.trim(); if (!q) { sugg.hidden = true; } else recSugTimer = setTimeout(() => searchSug(q), 120); decorateOverwrite(); updateCostPreview(); });
+    e.item.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape') { sugg.hidden = true; return; }
+      if (sugg.hidden) { if (ev.key === 'Enter') { ev.preventDefault(); saveStock(); } return; }
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); recSugIndex = (recSugIndex + 1) % recSugItems.length; renderSug(); }
+      else if (ev.key === 'ArrowUp') { ev.preventDefault(); recSugIndex = (recSugIndex - 1 + recSugItems.length) % recSugItems.length; renderSug(); }
+      else if (ev.key === 'Enter') { ev.preventDefault(); if (recSugIndex >= 0) chooseSug(recSugIndex); else saveStock(); }
+    });
+    e.item.addEventListener('blur', () => setTimeout(() => sugg.hidden = true, 160));
+    sugg.addEventListener('mousedown', ev => { const row = ev.target.closest('[data-sug]'); if (row) { ev.preventDefault(); chooseSug(Number(row.dataset.sug)); } });
+    e.price.addEventListener('input', updateCostPreview);
+    e.hq.addEventListener('change', () => { decorateOverwrite(); updateCostPreview(); });
+    $('rec-error-close').addEventListener('click', () => $('rec-error').hidden = true);
+    $('rec-error-retry').addEventListener('click', () => { $('rec-error').hidden = true; saveStock(); });
+    $('rec-save').addEventListener('click', () => saveStock());
+    if (prefill && prefill.qty != null) { e.total.value = prefill.qty; sync('total'); }
+  });
+}
+
+async function saveStock(forcePayload) {
+  const e = recEls(); if (!e.char) return;
+  if (!e.char.value) { toast('先添加一个角色', 'warn'); return; }
+  const name = e.item.value.trim();
+  if (!name) { toast('填材料名', 'warn'); e.item.focus(); return; }
+  const t = parseQty(e.total.value, recStack);
+  if (!t.ok) { toast('数量填得不对，支持 1523 或 1组524 两种写法', 'warn'); e.total.focus(); return; }
+  const payload = forcePayload || { character_id: Number(e.char.value), item_name: name, location: e.loc.value || '背包', qty: t.qty, hq: e.hq.checked ? 1 : 0, unit_price: readPriceInput(), mode: recMode };
+  const btn = $('rec-save'); if (btn) btn.disabled = true;
+  const res = await postJSON('/api/stock', payload);
+  if (btn) btn.disabled = false;
+  if (!res.ok && res.hint === 'pick') { pendingSave = payload; openPicker(name); toast(`库里没有「${name}」这个名字，可能打错了。选一个绑定，或点「先按原名临时记录」`, 'warn'); return; }
+  if (!res.ok) { showRecError('保存失败：' + (res.error || '未知错误')); return; }
+  if (res.unchanged) { toast(`数量和原来一样（${fmtGroup(res.qty, recStack)}），未产生改动`); return; }
+  const isAdd = res.mode === 'add' || res.action === 'add' || recMode === 'add';
+  const amount = isAdd && res.added != null ? res.added : res.qty;
+  let msg = (isAdd ? '已加：' : '已记：') + res.item_name + ' ' + amount;
+  if (res.renamed) msg = `已按标准名「${res.item_name}」${isAdd ? '加了' : '记录'} ${amount}（你输入的是「${res.input_name}」）`;
+  if (res.unbound) msg += ' · 临时记录（未绑定物品）';
+  if (res.cost) msg += ` · 成本 ${res.cost} gil`;
+  msg += ` → ${res.character} / ${res.location}（合计 ${res.total}）`;
+  toast(msg);
+  e.item.value = ''; e.hq.checked = false; e.total.value = ''; e.group.value = ''; e.rest.value = ''; e.price.value = '';
+  recStack = 0; e.hint.textContent = ''; e.qtyHint.textContent = ''; updateCostPreview(); e.item.focus();
+  refreshAfterWrite();
+}
+
+// ━━━━━ 绑定 picker（认不出名字时） ━━━━━
+let pickerSeq = 0, pickAlias = '';
+function openPicker(alias) {
+  pickAlias = alias;
+  $('picker-title').textContent = `把「${alias}」绑定到物品库里的哪个物品？`;
+  $('picker-q').value = alias;
+  $('picker-overlay').hidden = false;
+  setTimeout(() => { $('picker-q').focus(); $('picker-q').select(); }, 30);
+  pickerSearch(alias);
+}
+function closePicker() { $('picker-overlay').hidden = true; pendingSave = null; }
+function pickerRow(id, name) { return `<div class="picker-row" data-bind="${id}" data-name="${escHtml(name)}"><span>${escHtml(name)}</span><span style="color:var(--muted);font-size:11px">#${id}</span><span class="bind">点我绑定</span></div>`; }
+async function pickerSearch(q) {
+  const seq = ++pickerSeq, box = $('picker-results');
+  box.innerHTML = '<div class="hintline">搜索中…</div>';
+  try {
+    const d = await api('/api/item_search?q=' + encodeURIComponent(q));
+    if (seq !== pickerSeq) return;
+    let html = (d.items || []).map(it => pickerRow(it.id, it.name)).join('');
+    if (/[a-zA-Z]/.test(q)) { try { const en = await api('/api/item_search_en?q=' + encodeURIComponent(q)); if (seq === pickerSeq && en.items && en.items.length) html += '<div class="picker-sec">英文名匹配（XIVAPI）</div>' + en.items.map(it => pickerRow(it.id || it.item_id, it.name)).join(''); } catch (e) {} }
+    if (/^#?\d+$/.test(q.trim())) { try { const by = await api('/api/item_by_id?id=' + q.trim().replace('#', '')); if (seq === pickerSeq && by.item_id) html += '<div class="picker-sec">按 ID</div>' + pickerRow(by.item_id, by.name || by.name_en || ('#' + by.item_id)); } catch (e) {} }
+    if (seq !== pickerSeq) return;
+    box.innerHTML = html || '<div class="hintline">本地表里没有相近的名字。可以试试英文名（例如 Iron Ingot），或者输入物品 ID。</div>';
+    box.querySelectorAll('[data-bind]').forEach(r => r.addEventListener('click', () => doBind(Number(r.dataset.bind), r.dataset.name)));
+  } catch (e) { if (seq === pickerSeq) box.innerHTML = '<div class="hintline bad">搜索失败：' + escHtml(e.message) + '</div>'; }
+}
+async function doBind(itemId, itemName) {
+  const res = await postJSON('/api/alias', { alias: pickAlias, item_id: itemId });
+  if (!res.ok) { toast(res.error || '绑定失败', 'warn'); return; }
+  toast(`已绑定：${pickAlias} → ${itemName} #${itemId}`);
+  $('picker-overlay').hidden = true;
+  const snap = pendingSave; pendingSave = null;
+  refreshAfterWrite();
+  if (snap) saveStock(snap);
+}
+
+// ━━━━━ 添加角色 ━━━━━
+function openCharacters() {
+  const listHtml = () => S.characters.length ? S.characters.map(c => `
+    <div class="wrow" style="align-items:center;border-bottom:1px solid var(--line);padding:6px 0">
+      <div style="flex:1;min-width:0;font-size:13px">${escHtml(c.name)}@${escHtml(c.world)}<div class="hintline">${escHtml(c.account || '无账号')} · ${c.kinds || 0} 种材料</div></div>
+    </div>`).join('') : '<div class="hintline">还没有角色。下面添加一个。</div>';
+  openModal('角色管理', `
+    <div class="wform">
+      <div class="picker-sec">现有角色（${S.characters.length}）</div>
+      <div id="char-list">${listHtml()}</div>
+      <div class="picker-sec" style="margin-top:12px">添加角色</div>
+      <div class="wfield"><label>账号（备注用，可空）</label><input type="text" id="char-account" placeholder="例如：小号A"></div>
+      <div class="wrow"><div class="wfield"><label>角色名</label><input type="text" id="char-name" placeholder="例如：阿辉"></div><div class="wfield"><label>服务器</label><input type="text" id="char-world" placeholder="例如：豆豆柴"></div></div>
+      <div class="wactions"><button class="btn-primary" id="char-save">添加</button></div>
+    </div>`, (body) => {
+    const submit = async () => {
+      const name = $('char-name').value.trim();
+      if (!name) { toast('填角色名', 'warn'); $('char-name').focus(); return; }
+      const res = await postJSON('/api/character', { account: $('char-account').value.trim(), name, world: $('char-world').value.trim() });
+      if (!res.ok) { toast(res.error || '添加失败', 'warn'); return; }
+      toast('已添加 ' + name);
+      const ch = await api('/api/characters'); S.characters = ch.characters || [];
+      $('char-list').innerHTML = listHtml();
+      $('char-name').value = ''; $('char-account').value = ''; $('char-world').value = '';
+      $('char-name').focus();
+      populateFilters(); refreshAfterWrite();
+    };
+    $('char-save').addEventListener('click', submit);
+    $('char-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+  }, true);
+}
+function openAddCharacter() { openCharacters(); }
+
+// ━━━━━ 改数量（POST /api/stock 四元组 set，沿用 V1 已验证语义） ━━━━━
+function openEdit(btn) {
+  const d = btn.dataset, stack = Number(d.stack) || 0;
+  openModal(`改数量/位置 · ${d.name}`, `
+    <div class="wform">
+      <div class="hintline">${escHtml(d.name)} · 当前 ${fmtNum(Number(d.qty))}${Number(d.hq) ? ' · HQ' : ''}（改完还是同一份货；换位置会自动合并进目标格）</div>
+      <div class="wfield"><label>数量</label>
+        <div class="qty-three"><input type="text" inputmode="numeric" id="ed-total" class="qt-total" value="${d.qty}"><input type="text" inputmode="numeric" id="ed-group" class="qt-part" placeholder="组"><span class="unit">组</span><input type="text" inputmode="numeric" id="ed-rest" class="qt-part" placeholder="余"><span class="unit">余</span></div>
+        <div class="hintline" id="ed-hint"></div>
+      </div>
+      <div class="wrow"><div class="wfield"><label>角色</label><select id="ed-char">${charOptionsHtml(false)}</select></div><div class="wfield"><label>位置</label><select id="ed-loc"></select></div></div>
+      <div class="wactions"><button class="btn-ghost" id="ed-cancel">取消</button><button class="btn-primary" id="ed-save">保存</button></div>
+    </div>`, (body, close) => {
+    const cfg = { total: $('ed-total'), group: $('ed-group'), rest: $('ed-rest'), hint: $('ed-hint'), stack, restManual: false };
+    const charSel = $('ed-char'), locSel = $('ed-loc');
+    charSel.value = d.cid;
+    const rebuildLoc = (keep) => {
+      locSel.innerHTML = locationOptionsHtml(charSel.value, 0, true);
+      const want = keep || d.loc;
+      locSel.value = (want && [...locSel.options].some(o => o.value === want)) ? want : '背包';
+    };
+    rebuildLoc(d.loc);
+    syncThree(cfg, 'total');
+    cfg.total.addEventListener('input', () => syncThree(cfg, 'total'));
+    cfg.group.addEventListener('input', () => syncThree(cfg, 'group'));
+    cfg.rest.addEventListener('input', () => syncThree(cfg, 'rest'));
+    charSel.addEventListener('change', () => rebuildLoc());
+    locSel.addEventListener('change', () => { if (locSel.value === ADD_RET) { const cid = charSel.value, next = Math.min(10, currentSlots(cid) + 1); retainerSlots[cid] = next; saveRetainerSlots(); rebuildLoc('雇员' + next); } });
+    const submit = async () => {
+      const t = parseQty(cfg.total.value, stack);
+      if (!t.ok) { toast('数量格式不对', 'warn'); cfg.total.focus(); return; }
+      const newCid = Number(charSel.value), newLoc = locSel.value;
+      if (t.qty === Number(d.qty) && String(newCid) === String(d.cid) && newLoc === d.loc) { close(); return; }
+      $('ed-save').disabled = true;
+      const res = await postJSON('/api/stock/update', { id: Number(d.sid), qty: t.qty, character_id: newCid, location: newLoc, item_name: d.name, hq: Number(d.hq) || 0 });
+      $('ed-save').disabled = false;
+      if (!res.ok) { toast(res.error || '保存失败', 'warn'); return; }
+      if (res.mode === 'move') toast(`已改：${res.item_name} ${res.qty} → ${res.to.character} / ${res.to.location}（现 ${res.target_qty}${res.merged ? '，已合并' : ''}）`);
+      else { const diff = t.qty - Number(d.qty); toast(`已改为 ${t.qty}（${diff > 0 ? '+' : ''}${diff}）`); }
+      close(); refreshAfterWrite();
+    };
+    $('ed-save').addEventListener('click', submit);
+    $('ed-cancel').addEventListener('click', close);
+    cfg.total.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    setTimeout(() => { cfg.total.focus(); cfg.total.select(); }, 40);
+  });
+}
+
+// ━━━━━ 取出（POST /api/stock/take） ━━━━━
+function openTake(btn) {
+  const d = btn.dataset, stack = Number(d.stack) || 0;
+  openModal(`取出 · ${d.name}`, `
+    <div class="wform">
+      <div class="hintline">${escHtml(d.name)} · ${escHtml(d.loc)} · 最多 ${fmtNum(Number(d.qty))}（取到 0 这行消失）</div>
+      <div class="wfield"><label>取出数量</label>
+        <div class="qty-three"><input type="text" inputmode="numeric" id="tk-total" class="qt-total" placeholder="总数"><input type="text" inputmode="numeric" id="tk-group" class="qt-part" placeholder="组"><span class="unit">组</span><input type="text" inputmode="numeric" id="tk-rest" class="qt-part" placeholder="余"><span class="unit">余</span></div>
+        <div class="hintline" id="tk-hint"></div>
+      </div>
+      <div class="wfield"><label>备注（可空）</label><input type="text" id="tk-note" placeholder="拿去做什么，例如：做家具 / 转给朋友"></div>
+      <div class="wactions"><button class="btn-ghost" id="tk-cancel">取消</button><button class="btn-primary" id="tk-save">确认取出</button></div>
+    </div>`, (body, close) => {
+    const cfg = { total: $('tk-total'), group: $('tk-group'), rest: $('tk-rest'), hint: $('tk-hint'), stack, restManual: false };
+    cfg.total.addEventListener('input', () => syncThree(cfg, 'total'));
+    cfg.group.addEventListener('input', () => syncThree(cfg, 'group'));
+    cfg.rest.addEventListener('input', () => syncThree(cfg, 'rest'));
+    const submit = async () => {
+      const t = parseQty(cfg.total.value, stack);
+      if (!t.ok || t.qty <= 0) { toast('填要取出的数量，可以写 1组524', 'warn'); cfg.total.focus(); return; }
+      $('tk-save').disabled = true;
+      const res = await postJSON('/api/stock/take', { id: Number(d.sid), qty: t.qty, note: $('tk-note').value.trim() });
+      $('tk-save').disabled = false;
+      if (!res.ok) { toast(res.error || '取货失败', 'warn'); return; }
+      let msg = `已取出 ${fmtGroup(res.took, res.stack)}` + (res.removed ? '，该格已清空' : `，剩 ${res.remaining}`) + ` · 合计 ${res.total}`;
+      toast(msg); close(); refreshAfterWrite();
+    };
+    $('tk-save').addEventListener('click', submit);
+    $('tk-cancel').addEventListener('click', close);
+    [$('tk-total'), $('tk-group'), $('tk-rest'), $('tk-note')].forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }));
+  });
+}
+
+// ━━━━━ 搬移（POST /api/stock/move，部分搬移校验） ━━━━━
+function openMove(btn) {
+  const d = btn.dataset, stack = Number(d.stack) || 0, maxQty = Number(d.qty);
+  openModal(`搬移 · ${d.name}`, `
+    <div class="wform">
+      <div class="hintline">${escHtml(d.name)} · 现有 ${fmtNum(maxQty)} · 总数不变，目标有同材料会相加</div>
+      <div class="wfield"><label>搬移数量</label>
+        <div class="qty-three"><input type="text" inputmode="numeric" id="mv-total" class="qt-total" value="${maxQty}"><input type="text" inputmode="numeric" id="mv-group" class="qt-part" placeholder="组"><span class="unit">组</span><input type="text" inputmode="numeric" id="mv-rest" class="qt-part" placeholder="余"><span class="unit">余</span></div>
+        <div class="hintline" id="mv-hint"></div><div class="hintline bad" id="mv-over" hidden></div>
+      </div>
+      <div class="wrow"><div class="wfield"><label>目标角色</label><select id="mv-char">${charOptionsHtml(false)}</select></div><div class="wfield"><label>目标位置</label><select id="mv-loc"></select></div></div>
+      <div class="hintline warn" id="mv-warn" hidden>部队柜要求目标角色已绑定部队，否则会记成「未归部队」</div>
+      <div class="wactions"><button class="btn-ghost" id="mv-cancel">取消</button><button class="btn-primary" id="mv-save">确认搬移</button></div>
+    </div>`, (body, close) => {
+    const cfg = { total: $('mv-total'), group: $('mv-group'), rest: $('mv-rest'), hint: $('mv-hint'), stack, restManual: false };
+    const charSel = $('mv-char'), locSel = $('mv-loc');
+    charSel.value = d.cid;
+    const rebuildLoc = (keep) => {
+      locSel.innerHTML = locationOptionsHtml(charSel.value, 0, true);
+      const want = keep || (d.loc === '背包' ? '鞍囊' : '背包');
+      locSel.value = (want && [...locSel.options].some(o => o.value === want)) ? want : '背包';
+      $('mv-warn').hidden = locSel.value !== '部队柜';
+    };
+    rebuildLoc();
+    const validate = () => {
+      const t = parseQty(cfg.total.value, stack), q = t.ok ? t.qty : null;
+      const over = q != null && q > maxQty;
+      $('mv-over').hidden = !over; if (over) $('mv-over').textContent = `超过现有 ${maxQty}`;
+      cfg.total.style.borderColor = over ? 'var(--danger)' : '';
+      $('mv-save').disabled = !(q > 0) || over;
+      return q;
+    };
+    syncThree(cfg, 'total'); validate();
+    cfg.total.addEventListener('input', () => { syncThree(cfg, 'total'); validate(); });
+    cfg.group.addEventListener('input', () => { syncThree(cfg, 'group'); validate(); });
+    cfg.rest.addEventListener('input', () => { syncThree(cfg, 'rest'); validate(); });
+    charSel.addEventListener('change', () => rebuildLoc());
+    locSel.addEventListener('change', () => {
+      if (locSel.value === ADD_RET) { const cid = charSel.value, next = Math.min(10, currentSlots(cid) + 1); retainerSlots[cid] = next; saveRetainerSlots(); rebuildLoc('雇员' + next); }
+      $('mv-warn').hidden = locSel.value !== '部队柜';
+    });
+    const submit = async () => {
+      const q = validate();
+      if (!(q > 0)) { toast('搬移数量要大于 0', 'warn'); return; }
+      $('mv-save').disabled = true;
+      const res = await postJSON('/api/stock/move', { id: Number(d.sid), qty: q, character_id: Number(charSel.value), location: locSel.value });
+      $('mv-save').disabled = false;
+      if (!res.ok) { toast(res.error || '搬移失败', 'warn'); return; }
+      const toChar = S.characters.find(c => String(c.id) === charSel.value);
+      let msg = `已搬移：${res.item_name} ${q} → ${res.to_character || (toChar ? toChar.name : '')} / ${res.to_location}`;
+      msg += res.remaining > 0 ? `（现 ${res.target_qty}，原处剩 ${res.remaining}）` : `（现 ${res.target_qty}）`;
+      toast(msg); close(); refreshAfterWrite();
+    };
+    $('mv-save').addEventListener('click', submit);
+    $('mv-cancel').addEventListener('click', close);
+    setTimeout(() => { cfg.total.focus(); cfg.total.select(); }, 40);
+  });
+}
+
+// ━━━━━ 删行（两次确认，后端先打快照） ━━━━━
+async function deleteRow(btn) {
+  if (btn.dataset.armed === '1') {
+    btn.dataset.armed = ''; btn.classList.remove('armed'); btn.disabled = true;
+    const res = await postJSON('/api/stock/delete', { id: Number(btn.dataset.sid) });
+    btn.disabled = false;
+    if (!res.ok) { toast(res.error || '删除失败', 'warn'); return; }
+    toast(`已删除：${res.item_name} ${res.qty}（${res.location}）`);
+    refreshAfterWrite();
+  } else {
+    btn.dataset.armed = '1'; btn.classList.add('armed');
+    const old = btn.textContent; btn.textContent = '确认';
+    toast('再点一次「确认」才会真的删除（3 秒内）', 'warn');
+    setTimeout(() => { if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.classList.remove('armed'); btn.textContent = old; } }, 3000);
+  }
+}
+
+// ━━━━━ 撤销（两次确认 + Ctrl+Z + 错误码映射） ━━━━━
+const UNDO_CODE_TEXT = { none: '没有可撤销的操作', voided: '最近一条已被标记异常，先点「恢复」再撤销', unsupported_move: '搬移/改位置不能单独撤销：请再搬一次，或到「管理 · 快照」恢复', unsupported_op: '最新一条是未确认/部队类操作，不能跨过它撤销；请先处理这条', crossed_ops: '这一格已被后续操作改动，不能安全撤销；请用快照恢复' };
+const ACTION_LABELS = { store: '新增', add: '加库存', set: '覆盖', clear: '删除', take: '取出', rename: '改名', undo: '撤销' };
+let undoArmed = false, undoTimer = null;
+function disarmUndo() { undoArmed = false; clearTimeout(undoTimer); const b = $('btn-undo'); b.classList.remove('armed'); b.textContent = '撤销'; }
+async function quickUndo() {
+  const b = $('btn-undo');
+  if (!undoArmed) {
+    undoArmed = true; b.classList.add('armed'); b.textContent = '确认撤销';
+    toast('再点一次「确认撤销」才会回滚最近一条（5 秒内）', 'warn');
+    undoTimer = setTimeout(disarmUndo, 5000);
+    return;
+  }
+  disarmUndo(); b.disabled = true;
+  const res = await postJSON('/api/undo', {});
+  setTimeout(() => { b.disabled = false; }, 500);
+  if (!res.ok) { toast(res.error || UNDO_CODE_TEXT[res.code] || '撤销失败', 'warn'); return; }
+  toast(`已撤销：${ACTION_LABELS[res.action] || res.action} ${res.item_name} → 该格回到 ${fmtGroup(res.before, res.stack)}（${res.character} / ${res.location}）`);
+  refreshAfterWrite();
+}
+
+// ━━━━━ 未确认库存（转移 / 丢弃） ━━━━━
+function findPendingRow(items, sid) { for (const it of items) for (const r of it.rows) if (String(r.stock_id) === String(sid)) return { ...r, item_name: it.item_name, hq: it.hq }; return null; }
+async function openPending() {
+  let data;
+  try { data = await api('/api/pending'); } catch (e) { toast('未确认库存读取失败：' + e.message, 'warn'); return; }
+  const items = data.items || [];
+  const body = items.length ? items.map(it => `
+    <div class="wfield" style="border-bottom:1px solid var(--line);padding-bottom:8px">
+      <label>${it.hq ? '<span class="badge-hq">HQ</span> ' : ''}${escHtml(it.item_name)} · 合计 ${fmtNum(it.total)}</label>
+      ${it.rows.map(r => `
+        <div class="wrow" style="align-items:center;border-top:1px solid var(--line);padding-top:6px">
+          <div style="flex:1;min-width:0;font-size:12px">${escHtml(r.character)}@${escHtml(r.world)} · 原属 ${escHtml(r.origin || '')}<div class="hintline">${escHtml(r.moved_text || r.age_text || '')}</div></div>
+          <div style="font-weight:600">${fmtNum(r.qty)}</div>
+          <button class="btn-mini" data-pd-move="${r.stock_id}">转移</button>
+          <button class="btn-mini danger" data-pd-drop="${r.stock_id}">丢弃</button>
+        </div>`).join('')}
+    </div>`).join('') : '<div class="hintline">还没有未确认的库存。删雇员栏位时，里面的库存会转到这里。</div>';
+  openModal(`未确认库存（${data.summary ? data.summary.rows : 0} 行）`, `<div class="wform">${body}</div>`, (b) => {
+    b.querySelectorAll('[data-pd-move]').forEach(btn => btn.addEventListener('click', () => openPendingMove(findPendingRow(items, btn.dataset.pdMove))));
+    b.querySelectorAll('[data-pd-drop]').forEach(btn => btn.addEventListener('click', () => openPendingDrop(findPendingRow(items, btn.dataset.pdDrop))));
+  }, true);
+}
+function openPendingMove(r) {
+  if (!r) return;
+  const originSlot = Number((/^雇员(\d+)$/.exec(r.origin || '') || [])[1]) || 0;
+  openModal(`转移 · ${r.item_name}`, `
+    <div class="wform">
+      <div class="hintline">${escHtml(r.character)}@${escHtml(r.world)} · 原属 ${escHtml(r.origin || '')} · ${fmtNum(r.qty)} 件</div>
+      <div class="wrow"><div class="wfield"><label>转移到角色</label><select id="pd-char">${charOptionsHtml(false)}</select></div><div class="wfield"><label>位置</label><select id="pd-loc"></select></div></div>
+      <div class="hintline warn" id="pd-warn" hidden>部队柜要求目标角色已绑定部队，否则会记成「未归部队」</div>
+      <div class="wactions"><button class="btn-ghost" id="pd-cancel">返回</button><button class="btn-primary" id="pd-ok">确认转移</button></div>
+    </div>`, (body, close) => {
+    const charSel = $('pd-char'), locSel = $('pd-loc');
+    charSel.value = r.character_id;
+    const rebuildLoc = (keep) => {
+      locSel.innerHTML = locationOptionsHtml(charSel.value, originSlot, true);
+      const want = keep || r.origin;
+      locSel.value = (want && [...locSel.options].some(o => o.value === want)) ? want : '背包';
+      $('pd-warn').hidden = locSel.value !== '部队柜';
+    };
+    rebuildLoc();
+    charSel.addEventListener('change', () => rebuildLoc());
+    locSel.addEventListener('change', () => {
+      if (locSel.value === ADD_RET) { const cid = charSel.value, base = Math.min(10, Math.max(2, currentSlots(cid), originSlot)); retainerSlots[cid] = Math.min(10, base + 1); saveRetainerSlots(); rebuildLoc('雇员' + Math.min(10, base + 1)); }
+      $('pd-warn').hidden = locSel.value !== '部队柜';
+    });
+    $('pd-cancel').addEventListener('click', openPending);
+    $('pd-ok').addEventListener('click', async () => {
+      $('pd-ok').disabled = true;
+      const res = await postJSON('/api/pending/move', { stock_id: Number(r.stock_id), character_id: Number(charSel.value), location: locSel.value });
+      $('pd-ok').disabled = false;
+      if (!res.ok) { toast(res.error || '转移失败', 'warn'); return; }
+      const toChar = S.characters.find(c => String(c.id) === charSel.value);
+      toast(`已转移：${r.item_name} ${r.qty} → ${toChar ? toChar.name : ''} / ${locSel.value}` + (res.target_qty != null ? `（现在 ${res.target_qty}）` : ''));
+      refreshAfterWrite(); openPending();
+    });
+  });
+}
+function openPendingDrop(r) {
+  if (!r) return;
+  openModal(`丢弃 · ${r.item_name}`, `
+    <div class="wform">
+      <div class="hintline bad">丢弃不可恢复（后端会先打快照）：${escHtml(r.item_name)} ${fmtNum(r.qty)} 件</div>
+      <div class="wfield"><label>备注（可空）</label><input type="text" id="pd-note" placeholder="备注"></div>
+      <div class="wactions"><button class="btn-ghost" id="pd-cancel">返回</button><button class="btn-danger" id="pd-dropok">确认丢弃</button></div>
+    </div>`, (body) => {
+    $('pd-cancel').addEventListener('click', openPending);
+    $('pd-dropok').addEventListener('click', async () => {
+      $('pd-dropok').disabled = true;
+      const res = await postJSON('/api/pending/drop', { stock_id: Number(r.stock_id), note: $('pd-note').value });
+      $('pd-dropok').disabled = false;
+      if (!res.ok) { toast(res.error || '丢弃失败', 'warn'); return; }
+      toast(`已丢弃：${r.item_name} ${r.qty}` + (res.snapshot ? `（快照 ${res.snapshot}）` : ''));
+      refreshAfterWrite(); openPending();
+    });
+  });
+}
+
+// ━━━━━ 批量粘贴 / CSV 导入 ━━━━━
+function parseBatchLine(line) {
+  const raw = line.trim();
+  if (!raw || raw.startsWith('#')) return null;
+  const parts = raw.split(/\s+/);
+  let hq = 0;
+  if (parts.length > 1 && /^(hq|hq1|高质量)$/i.test(parts[parts.length - 1])) { hq = 1; parts.pop(); }
+  let location = '';
+  if (parts.length > 2 && (S.locations || []).includes(parts[parts.length - 1])) location = parts.pop();
+  if (parts.length < 2) return null;
+  const t = parseQty(parts.pop(), 0);
+  if (!t.ok || t.qty <= 0) return null;
+  const name = parts.join(' ');
+  return name ? { name, qty: t.qty, location, hq } : null;
+}
+function batchPreview() {
+  const el = $('bt-preview'); if (!el) return;
+  const lines = $('bt-text').value.split(/\r?\n/).map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+  if (!lines.length) { el.textContent = ''; el.className = 'hintline'; return; }
+  const cid = $('bt-char').value, loc = $('bt-loc').value, add = $('bt-add').checked;
+  let ok = 0, bad = 0, newCnt = 0, overCnt = 0, dup = 0; const keys = {};
+  lines.forEach(line => {
+    const p = parseBatchLine(line);
+    if (!p) { bad++; return; }
+    ok++;
+    const l = p.location || loc, key = `${cid}|${l}|${p.name}|${p.hq}`;
+    if (keys[key]) dup++; keys[key] = 1;
+    const cur = currentQtyForForm(cid, l, p.name, p.hq);
+    if (add || cur == null) newCnt++; else overCnt++;
+  });
+  let msg = `将写入 ${ok} 行 · 新增 ${newCnt} · 覆盖 ${overCnt}` + (bad ? ` · 无法识别 ${bad}` : '');
+  if (dup) msg += ` ⚠ 有 ${dup} 行重复（同名+同位置+同品质），只保留最后一行`;
+  el.textContent = msg + '（基于当前搜索结果估算）'; el.className = 'hintline' + ((bad || dup) ? ' warn' : '');
+}
+function openBatch() {
+  if (!S.characters.length) { toast('先添加一个角色', 'warn'); openAddCharacter(); return; }
+  let lastChar = null; try { lastChar = localStorage.getItem('recChar'); } catch (e) {}
+  const cid0 = S.characters.some(c => String(c.id) === lastChar) ? lastChar : S.characters[0].id;
+  openModal('批量录入', `
+    <div class="wform">
+      <div class="picker-sec">批量粘贴</div>
+      <div class="wrow"><div class="wfield"><label>角色</label><select id="bt-char">${charOptionsHtml(false)}</select></div><div class="wfield"><label>位置</label><select id="bt-loc"></select></div></div>
+      <label class="wcheck"><input type="checkbox" id="bt-add"> 按增量累加（不勾是覆盖同格数量）</label>
+      <div class="wfield"><textarea id="bt-text" rows="6" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px;font:inherit;font-size:13px;background:var(--panel);color:var(--text);resize:vertical" placeholder="一行一条：材料名 数量 [位置] [hq]&#10;例如：黑铁锭 100&#10;铁矿 50 背包 hq&#10;# 开头是注释"></textarea><div class="hintline" id="bt-preview"></div></div>
+      <div class="wactions"><button class="btn-primary" id="bt-run">开始导入</button></div>
+      <div id="bt-result"></div>
+      <div class="picker-sec" style="margin-top:16px">CSV 导入</div>
+      <div class="wfield"><label>选择 CSV 文件（上限 2MB）</label><input type="file" id="bt-file" accept=".csv,text/csv"></div>
+    </div>`, (body) => {
+    const charSel = $('bt-char'), locSel = $('bt-loc');
+    charSel.value = cid0;
+    const rebuildLoc = () => { locSel.innerHTML = locationOptionsHtml(charSel.value, 0, false); locSel.value = '背包'; };
+    rebuildLoc();
+    charSel.addEventListener('change', () => { rebuildLoc(); batchPreview(); });
+    locSel.addEventListener('change', batchPreview);
+    $('bt-add').addEventListener('change', batchPreview);
+    $('bt-text').addEventListener('input', batchPreview);
+    $('bt-run').addEventListener('click', runBatch);
+    $('bt-file').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) previewImport(f); });
+    batchPreview();
+  }, true);
+}
+async function runBatch() {
+  const cid = $('bt-char').value;
+  if (!cid) { toast('先选一个角色', 'warn'); return; }
+  const text = $('bt-text').value;
+  if (!text.trim()) { toast('粘贴内容为空', 'warn'); return; }
+  const btn = $('bt-run'); btn.disabled = true; btn.textContent = '导入中…';
+  const res = await postJSON('/api/stock/batch', { character_id: Number(cid), text, location: $('bt-loc').value || '背包', mode: $('bt-add').checked ? 'add' : 'set' });
+  btn.disabled = false; btn.textContent = '开始导入';
+  if (!res.ok) { toast(res.error || '导入失败', 'warn'); return; }
+  const rows = (res.results || []).map(r => `<div class="hintline${r.ok ? '' : ' bad'}">${r.ok ? (r.unchanged ? '○' : '✅') : '❌'} ${escHtml(r.line)} — ${escHtml(r.message || '')}</div>`).join('');
+  $('bt-result').innerHTML = `<div class="hintline">成功 ${res.added} 条 · 未变 ${res.unchanged} 条 · 失败 ${res.failed} 条</div>` + rows;
+  toast(`导入完成：成功 ${res.added} 条`);
+  refreshAfterWrite();
+}
+const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+let importText = '';
+async function previewImport(file) {
+  if (file.size > MAX_IMPORT_BYTES) { toast(`文件太大（${Math.round(file.size / 1024)} KB），导入上限 2 MB，请拆分后再试`, 'warn'); return; }
+  importText = await file.text();
+  const res = await postJSON('/api/stock/import/preview', { text: importText });
+  if (!res.ok) { toast(res.error || '预览失败', 'warn'); return; }
+  showImportPreview(file.name, res);
+}
+function showImportPreview(fname, res) {
+  const ambiguous = res.ambiguous || [];
+  const skippedRows = res.skipped || [];
+  const ambHtml = ambiguous.length ? `<div class="form-error" style="margin:8px 0"><span class="msg">同名同服多个账号，无法确定身份；请在 CSV 补 account 列后重新选择文件${ambiguous.length > 8 ? '（仅列前 8 条）' : ''}</span></div>` + ambiguous.slice(0, 8).map(a => `<div class="hintline bad">第 ${a.line} 行 ${escHtml(a.character)}：${(a.candidates || []).map(c => `${escHtml(c.account)}（现有 ${c.qty}）`).join(' / ')}</div>`).join('') : '';
+  const skipHtml = skippedRows.length ? `<div class="picker-sec">跳过明细</div>` + skippedRows.slice(0, 6).map(s => `<div class="hintline">第 ${s.line} 行 ${escHtml(s.name || '')}：${escHtml(s.reason || '')}</div>`).join('') + (skippedRows.length > 6 ? `<div class="hintline">…等 ${skippedRows.length} 条</div>` : '') : '';
+  openModal('CSV 导入预览', `
+    <div class="wform">
+      <div class="hintline">${escHtml(fname)} · 共 ${res.total} 行 · 新增 ${res.will_add} 条 · 覆盖 ${res.will_update} 条 · 跳过 ${skippedRows.length} 条</div>
+      ${res.new_characters && res.new_characters.length ? `<div class="hintline">将新建角色：${res.new_characters.map(escHtml).join('、')}</div>` : ''}
+      ${ambHtml}${skipHtml}
+      <div class="wactions"><button class="btn-ghost" id="imp-cancel">取消</button><button class="btn-ghost" id="imp-append" ${ambiguous.length ? 'disabled' : ''}>追加导入</button><button class="btn-primary" id="imp-overwrite" ${ambiguous.length ? 'disabled' : ''}>覆盖导入</button></div>
+    </div>`, (body, close) => {
+    $('imp-cancel').addEventListener('click', close);
+    $('imp-append').addEventListener('click', () => runImport('append'));
+    $('imp-overwrite').addEventListener('click', () => runImport('overwrite'));
+  }, true);
+}
+async function runImport(mode) {
+  closeModal(); toast('导入中…');
+  const res = await postJSON('/api/stock/import/apply', { text: importText, mode });
+  if (!res.ok) {
+    if (res.ambiguous) { showImportPreview('CSV', { total: 0, will_add: 0, will_update: 0, skipped: [], ambiguous: res.ambiguous }); toast('导入已中止，未写入任何行。', 'warn'); }
+    else toast(res.error || '导入失败', 'warn');
+    return;
+  }
+  toast(`导入完成：新增 ${res.added}，覆盖 ${res.updated}` + (res.created_characters ? ` · 新建角色 ${res.created_characters}` : ''));
+  refreshAfterWrite();
+}
+
+// ━━━━━ 模态 / picker 关闭绑定 ━━━━━
+$('wmodal-close').addEventListener('click', closeModal);
+$('wmodal-overlay').addEventListener('click', e => { if (e.target === $('wmodal-overlay')) closeModal(); });
+$('picker-close').addEventListener('click', closePicker);
+$('picker-cancel').addEventListener('click', closePicker);
+$('picker-overlay').addEventListener('click', e => { if (e.target === $('picker-overlay')) closePicker(); });
+$('picker-force').addEventListener('click', () => { const snap = pendingSave; $('picker-overlay').hidden = true; pendingSave = null; if (snap) saveStock({ ...snap, allow_unbound: 1 }); });
+let pickerTimer = null;
+$('picker-q').addEventListener('input', () => { clearTimeout(pickerTimer); const q = $('picker-q').value.trim(); if (q) pickerTimer = setTimeout(() => pickerSearch(q), 150); });
+$('picker-q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const q = $('picker-q').value.trim(); if (q) pickerSearch(q); } });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('picker-overlay').hidden) closePicker();
+  else if (!$('wmodal-overlay').hidden) closeModal();
+});
+
+// ━━━━━ 启动 ━━━━━
+$('config-url').value = CFG.baseUrl || location.origin;
+init();
+
+/* ━━━━━ 页面心跳（内联）：开着就每 3 秒 ping，保活后端 ━━━━━ */
+(function () {
+  const sid = "p" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  let timer = null;
+  function ping() {
+    try {
+      fetch("/api/page/ping", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sid, visible: document.visibilityState === "visible" }), keepalive: true }).catch(() => {});
+    } catch (e) {}
+  }
+  function start() { if (timer) return; ping(); timer = setInterval(ping, 3000); }
+  function stop() { if (timer) { clearInterval(timer); timer = null; } }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") ping(); });
+  window.addEventListener("pageshow", start);
+  window.addEventListener("pagehide", stop);
+  start();
+})();
+
+/* ━━━━━ 页面切换快捷键（内联，可自录；与算料页双向互通） ━━━━━ */
+(function () {
+  const STORE = "ff14_page_hotkeys_v1";
+  const DEFAULTS = { stock: "alt+1", calc: "alt+2" };
+  const PAGES = { stock: "/ff14-stock-v2.html", calc: "/recipe-planner.html" };
+  function load() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(STORE) || "{}");
+      return { stock: typeof raw.stock === "string" ? raw.stock : DEFAULTS.stock, calc: typeof raw.calc === "string" ? raw.calc : DEFAULTS.calc };
+    } catch (e) { return { ...DEFAULTS }; }
+  }
+  let cfg = load(), recording = null;
+  function save() { try { localStorage.setItem(STORE, JSON.stringify(cfg)); } catch (e) {} }
+  function comboOf(e) {
+    if (!(e.ctrlKey || e.altKey || e.metaKey)) return "";
+    const mods = [];
+    if (e.ctrlKey) mods.push("ctrl"); if (e.altKey) mods.push("alt"); if (e.metaKey) mods.push("meta"); if (e.shiftKey) mods.push("shift");
+    let key = ""; const code = e.code || "";
+    if (code.startsWith("Key")) key = code.slice(3).toLowerCase();
+    else if (code.startsWith("Digit")) key = code.slice(5);
+    else if (code === "Space") key = "space";
+    else if (/^F\d+$/.test(code)) key = code.toLowerCase();
+    else if (e.key && e.key.length === 1) key = e.key.toLowerCase();
+    if (!key) return "";
+    mods.sort();
+    return mods.join("+") + "+" + key;
+  }
+  function label(combo) {
+    if (!combo) return "未设置";
+    const map = { ctrl: "Ctrl", alt: "Alt", meta: "Meta", shift: "Shift", space: "Space" };
+    return combo.split("+").map(p => map[p] || (p.length === 1 ? p.toUpperCase() : p)).join("+");
+  }
+  function go(page) {
+    const url = PAGES[page];
+    if (!url) return;
+    if (page === "stock" && location.pathname.endsWith("ff14-stock-v2.html")) return;
+    if (page === "calc" && location.pathname.endsWith("recipe-planner.html")) return;
+    location.href = url;
+  }
+  document.addEventListener("keydown", e => {
+    if (recording) {
+      e.preventDefault(); e.stopPropagation();
+      if (e.key === "Escape") { recording = null; refresh(); return; }
+      const combo = comboOf(e);
+      if (!combo) { recording = null; refresh(); return; }
+      cfg[recording] = combo; save(); recording = null; refresh(); return;
+    }
+    const combo = comboOf(e);
+    if (!combo) return;
+    if (combo === cfg.stock) { e.preventDefault(); go("stock"); }
+    else if (combo === cfg.calc) { e.preventDefault(); go("calc"); }
+  }, true);
+  let panel = null, btn = null;
+  function refresh() {
+    if (!panel) return;
+    Object.keys(cfg).forEach(key => {
+      const el = panel.querySelector('[data-combo="' + key + '"]');
+      if (!el) return;
+      el.textContent = recording === key ? "按下组合键…" : label(cfg[key]);
+      el.classList.toggle("recording", recording === key);
+    });
+    if (btn) btn.title = "自定义快捷键（库存 " + label(cfg.stock) + " / 算料 " + label(cfg.calc) + "）";
+  }
+  function placePanel() {
+    if (!btn || !panel) return;
+    const r = btn.getBoundingClientRect();
+    panel.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 368)) + "px";
+    panel.style.top = (r.bottom + 6) + "px";
+  }
+  function mount() {
+    const nav = document.querySelector(".topbar-actions");
+    if (!nav || document.querySelector(".hk-open")) return;
+    btn = document.createElement("button");
+    btn.type = "button"; btn.className = "hk-open"; btn.textContent = "⌨"; btn.setAttribute("aria-label", "自定义快捷键");
+    nav.insertBefore(btn, nav.firstChild);
+    panel = document.createElement("div");
+    panel.className = "hk-panel"; panel.hidden = true;
+    panel.innerHTML =
+      '<div class="hk-title">+ 快捷键（可自己录）</div>' +
+      '<div class="hk-row"><span class="hk-name">库存</span><button type="button" class="hk-combo" data-combo="stock"></button><button type="button" class="hk-record" data-record="stock">录制</button></div>' +
+      '<div class="hk-row"><span class="hk-name">算料清单</span><button type="button" class="hk-combo" data-combo="calc"></button><button type="button" class="hk-record" data-record="calc">录制</button></div>' +
+      '<div class="hk-tip">录制时按下组合键即可（必须带 Ctrl / Alt / Meta），Esc 取消录制。</div>' +
+      '<div class="hk-actions"><button type="button" data-reset>恢复默认</button></div>';
+    const header = nav.closest("header") || nav.parentNode;
+    header.parentNode.insertBefore(panel, header.nextSibling);
+    btn.addEventListener("click", () => { panel.hidden = !panel.hidden; if (!panel.hidden) { refresh(); placePanel(); } else { recording = null; refresh(); } });
+    panel.querySelectorAll("[data-record]").forEach(el => el.addEventListener("click", () => { recording = el.dataset.record; refresh(); }));
+    panel.querySelector("[data-reset]").addEventListener("click", () => { cfg = { ...DEFAULTS }; recording = null; save(); refresh(); });
+    document.addEventListener("click", e => { if (panel.hidden) return; if (panel.contains(e.target) || btn.contains(e.target)) return; panel.hidden = true; recording = null; refresh(); });
+    window.addEventListener("resize", () => { if (!panel.hidden) placePanel(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && !panel.hidden && !recording) panel.hidden = true; });
+    refresh();
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
+  else mount();
+})();
+</script>
+</body>
+</html>
