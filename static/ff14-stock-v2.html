@@ -177,6 +177,29 @@ button:disabled { opacity: .45; cursor: default; }
 .cost-edit { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); margin-top: 2px; }
 .inline-cost { width: 72px; height: 24px; padding: 2px 6px; font-size: 12px; border: 1px solid var(--accent); border-radius: 4px; background: var(--panel); color: var(--text); }
 .kind-tag { font-size: 10px; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 0 4px; }
+
+/* ━━━━━ 管理抽屉 ━━━━━ */
+.mgr-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 300; }
+.mgr-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 100vw; background: var(--bg); box-shadow: var(--shadow-lg); z-index: 301; transform: translateX(100%); transition: transform .25s ease; display: flex; flex-direction: column; }
+.mgr-drawer.open { transform: translateX(0); }
+.mgr-hd { display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.mgr-hd b { font-size: 15px; }
+.mgr-hint { font-size: 11px; color: var(--muted); flex: 1; }
+.mgr-close { background: none; border: none; color: var(--muted); font-size: 18px; padding: 2px 6px; }
+.mgr-close:hover { color: var(--text); }
+.mgr-tabs { display: flex; gap: 4px; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.mgr-tabs [role=tab] { background: transparent; border: 0; color: var(--muted); padding: 6px 14px; font-size: 13px; border-radius: 6px; }
+.mgr-tabs [role=tab].on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.mgr-body { flex: 1; overflow-y: auto; padding: 14px; }
+.mgr-pane { display: flex; flex-direction: column; gap: 14px; }
+.mgr-section { background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; }
+.mgr-section-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.mgr-section-hd b { font-size: 14px; }
+.mgr-section-hd .sub { font-size: 11px; color: var(--muted); flex: 1; }
+.mgr-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mgr-table th { text-align: left; padding: 6px; border-bottom: 2px solid var(--line); color: var(--muted); font-weight: 600; }
+.mgr-table td { padding: 6px; border-bottom: 1px solid var(--line); }
+.mgr-table th.num, .mgr-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .item-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
   font-size: 12px; color: var(--muted); white-space: nowrap; }
 .stale-indicator { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
@@ -457,6 +480,7 @@ button:disabled { opacity: .45; cursor: default; }
     <button class="btn-ghost" id="btn-undo">撤销</button>
     <button class="btn-ghost" id="btn-batch">批量</button>
     <button class="btn-ghost" id="btn-chars">角色</button>
+    <button class="btn-ghost" id="btn-manage">管理</button>
     <button class="btn-ghost" id="btn-export">导出</button>
     <button class="btn-ghost" id="btn-settings" title="连接设置">⚙</button>
   </div>
@@ -520,6 +544,24 @@ button:disabled { opacity: .45; cursor: default; }
     <div class="safety-body" id="safety-body"></div>
   </div>
 </div>
+
+<!-- 管理抽屉（记录/数据/设置/工具） -->
+<div class="mgr-mask" id="mgr-mask" hidden></div>
+<aside class="mgr-drawer" id="mgr-drawer" aria-label="管理">
+  <div class="mgr-hd"><b>管理</b><span class="mgr-hint">低频操作，不影响主界面</span><button class="mgr-close" id="mgr-close" aria-label="关闭">✕</button></div>
+  <div class="mgr-tabs" role="tablist">
+    <button type="button" role="tab" data-mtab="records" class="on" aria-selected="true">记录</button>
+    <button type="button" role="tab" data-mtab="data" aria-selected="false">数据</button>
+    <button type="button" role="tab" data-mtab="settings" aria-selected="false">设置</button>
+    <button type="button" role="tab" data-mtab="tools" aria-selected="false">工具</button>
+  </div>
+  <div class="mgr-body">
+    <div class="mgr-pane" data-mpane="records" id="mgr-records"></div>
+    <div class="mgr-pane" data-mpane="data" id="mgr-data" hidden></div>
+    <div class="mgr-pane" data-mpane="settings" id="mgr-settings" hidden></div>
+    <div class="mgr-pane" data-mpane="tools" id="mgr-tools" hidden></div>
+  </div>
+</aside>
 
 <!-- 写操作模态（记一笔/改/搬/取/未确认共用） -->
 <div class="wmodal-overlay" id="wmodal-overlay" hidden>
@@ -701,6 +743,7 @@ async function init() {
   try {
     const [st, ch] = await Promise.all([api('/api/state'), api('/api/characters')]);
     S.csrfToken = st.csrf_token || ''; S.version = st.version || ''; S.stale_days = st.stale_days || 7;
+    S.local = st.local !== false;
     S.locations = st.locations || []; S.characters = ch.characters || [];
     if (st.retainer_max) for (const k in st.retainer_max) retainerMax[k] = Math.max(Number(retainerMax[k]) || 0, Number(st.retainer_max[k]));
     S.character_count = st.character_count || 0; S.stock_rows = st.stock_rows || 0;
@@ -1625,7 +1668,7 @@ async function deleteRow(btn) {
 
 // ━━━━━ 撤销（两次确认 + Ctrl+Z + 错误码映射） ━━━━━
 const UNDO_CODE_TEXT = { none: '没有可撤销的操作', voided: '最近一条已被标记异常，先点「恢复」再撤销', unsupported_move: '搬移/改位置不能单独撤销：请再搬一次，或到「管理 · 快照」恢复', unsupported_op: '最新一条是未确认/部队类操作，不能跨过它撤销；请先处理这条', crossed_ops: '这一格已被后续操作改动，不能安全撤销；请用快照恢复' };
-const ACTION_LABELS = { store: '新增', add: '加库存', set: '覆盖', clear: '删除', take: '取出', rename: '改名', undo: '撤销' };
+const ACTION_LABELS = { store: '新增', add: '加库存', set: '覆盖', clear: '删除', take: '取出', rename: '改名', undo: '撤销', pending: '未确认', pending_move: '未确认转移', pending_drop: '未确认丢弃', fc_merged: '部队归并', fc_disbanded: '部队解散' };
 let undoArmed = false, undoTimer = null;
 function disarmUndo() { undoArmed = false; clearTimeout(undoTimer); const b = $('btn-undo'); b.classList.remove('armed'); b.textContent = '撤销'; }
 async function quickUndo() {
@@ -1851,6 +1894,346 @@ document.addEventListener('keydown', e => {
   if (!$('picker-overlay').hidden) closePicker();
   else if (!$('wmodal-overlay').hidden) closeModal();
 });
+
+// ━━━━━ 管理抽屉（记录/数据/设置/工具，逐步填充） ━━━━━
+let mgrTab = 'records';
+function openManage(tab) { $('mgr-mask').hidden = false; $('mgr-drawer').classList.add('open'); switchMgrTab(tab || mgrTab); }
+function closeManage() { $('mgr-drawer').classList.remove('open'); $('mgr-mask').hidden = true; }
+function switchMgrTab(tab) {
+  mgrTab = tab;
+  document.querySelectorAll('.mgr-tabs [role=tab]').forEach(b => { const on = b.dataset.mtab === tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  document.querySelectorAll('.mgr-pane').forEach(p => p.hidden = p.dataset.mpane !== tab);
+  loadMgrTab(tab);
+}
+function loadMgrTab(tab) {
+  if (tab === 'records') loadRecords();
+  else if (tab === 'data') loadDataTab();
+  else if (tab === 'settings') loadSettings();
+  else if (tab === 'tools') loadTools();
+}
+function mgrPlaceholder(name) { return `<div class="mgr-section"><div class="mgr-section-hd"><b>${name}</b></div><div class="hintline">功能补充中…</div></div>`; }
+function loadRecords() {
+  $('mgr-records').innerHTML = `
+    <div class="mgr-section">
+      <div class="mgr-section-hd"><b>审计</b><span class="sub" id="audit-summary"></span></div>
+      <div class="wrow" style="margin-bottom:8px">
+        <button class="btn-mini" data-range="today">今天</button><button class="btn-mini" data-range="7">7 天</button><button class="btn-mini" data-range="30">30 天</button><button class="btn-mini" data-range="all">全部</button>
+        <input type="date" id="audit-from" style="height:28px" aria-label="开始日期"><input type="date" id="audit-to" style="height:28px" aria-label="结束日期">
+        <select id="audit-check" style="height:28px" aria-label="核对状态"><option value="">核对：全部</option><option value="1">已核对</option><option value="0">未核对</option><option value="void">异常</option></select>
+        <button class="btn-mini" id="audit-refresh">刷新</button>
+      </div>
+      <div id="audit-table"></div>
+      <div class="wrow" style="margin-top:8px;justify-content:flex-end"><button class="btn-mini" id="audit-copy">复制汇总</button><button class="btn-mini" id="audit-csv">导出 CSV</button></div>
+    </div>
+    <div class="mgr-section">
+      <div class="mgr-section-hd"><b>最近操作</b><span class="sub" id="ledger-summary">勾选＝已核对</span></div>
+      <div class="wrow" style="margin-bottom:8px"><button class="btn-mini" id="log-check-all">全勾当前</button><button class="btn-mini" id="log-check-none">全不勾</button><label class="wcheck" style="font-size:12px"><input type="checkbox" id="log-only-take"> 只看取货</label></div>
+      <div id="ledger-body"></div>
+    </div>`;
+  $('mgr-records').querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => setAuditRange(b.dataset.range)));
+  $('audit-refresh').addEventListener('click', () => { auditState.from = $('audit-from').value; auditState.to = $('audit-to').value; auditState.check = $('audit-check').value; loadAudit(); });
+  $('audit-check').addEventListener('change', () => { auditState.check = $('audit-check').value; loadAudit(); });
+  $('audit-copy').addEventListener('click', () => exportAudit('copy'));
+  $('audit-csv').addEventListener('click', () => exportAudit('csv'));
+  $('log-check-all').addEventListener('click', () => batchCheck(true));
+  $('log-check-none').addEventListener('click', () => batchCheck(false));
+  $('log-only-take').addEventListener('change', renderLedger);
+  loadAudit(); loadLedger();
+}
+let auditState = { from: '', to: '', check: '' };
+function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function setAuditRange(range) {
+  const today = new Date();
+  if (range === 'all') { auditState.from = ''; auditState.to = ''; }
+  else { const days = range === 'today' ? 0 : range === '7' ? 6 : 29; const from = new Date(today); from.setDate(from.getDate() - days); auditState.from = ymd(from); auditState.to = ymd(today); }
+  $('audit-from').value = auditState.from; $('audit-to').value = auditState.to;
+  loadAudit();
+}
+function auditParams() { const p = new URLSearchParams(); if (auditState.from) p.set('from', auditState.from); if (auditState.to) p.set('to', auditState.to); if (auditState.check) p.set('check', auditState.check); return p; }
+async function loadAudit() {
+  const box = $('audit-table'); if (!box) return;
+  box.innerHTML = '<div class="hintline">读取中…</div>';
+  let d;
+  try { d = await api('/api/audit?' + auditParams()); } catch (e) { box.innerHTML = '<div class="hintline bad">读取失败：' + escHtml(e.message) + '</div>'; return; }
+  if (!d.ok) { box.innerHTML = '<div class="hintline bad">' + escHtml(d.error || '读取失败') + '</div>'; return; }
+  $('audit-summary').textContent = `${d.ops} 条操作 · ${d.totals.kinds} 种材料` + (d.void_count && auditState.check !== 'void' ? ` · 另有 ${d.void_count} 条异常已排除` : '');
+  const rows = (d.items || []).map(it => `<tr><td>${escHtml(it.name)}</td><td class="num">${it.added || '—'}</td><td class="num">${it.took || '—'}</td><td class="num">${it.adjusted || '—'}</td><td class="num">${it.cleared || '—'}</td><td class="num" style="color:${it.net > 0 ? 'var(--ok)' : it.net < 0 ? 'var(--danger)' : 'inherit'}">${it.net > 0 ? '+' : ''}${it.net}</td><td>${escHtml((it.characters || []).join('、'))}</td></tr>`).join('');
+  box.innerHTML = rows ? `<table class="mgr-table"><thead><tr><th>材料</th><th class="num">新增</th><th class="num">取出</th><th class="num">调整</th><th class="num">删除</th><th class="num">净变化</th><th>涉及角色</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="hintline">这个范围没有操作。</div>';
+}
+async function exportAudit(kind) {
+  let d;
+  try { d = await api('/api/audit/export?' + auditParams()); } catch (e) { toast('导出失败：' + e.message, 'warn'); return; }
+  if (!d.ok) { toast(d.error || '导出失败', 'warn'); return; }
+  if (kind === 'copy') copyText(d.text, '已复制汇总');
+  else { const blob = new Blob(['\uFEFF' + d.csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'ff14-audit.csv'; a.click(); URL.revokeObjectURL(url); toast('已导出 CSV'); }
+}
+function copyText(text, okMsg) {
+  const done = () => toast(okMsg);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  else fallbackCopy(text, done);
+}
+function fallbackCopy(text, done) { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败', 'warn'); } document.body.removeChild(ta); }
+
+// ━━━━━ 最近操作流水（勾选核对 / 标异常 / 备注） ━━━━━
+let ledgerRows = [];
+async function loadLedger() {
+  let d;
+  try { d = await api('/api/ledger?limit=30'); } catch (e) { $('ledger-body').innerHTML = '<div class="hintline bad">读取失败：' + escHtml(e.message) + '</div>'; return; }
+  ledgerRows = d.rows || [];
+  renderLedger();
+}
+function renderLedger() {
+  const body = $('ledger-body'); if (!body) return;
+  const onlyTake = $('log-only-take') && $('log-only-take').checked;
+  const rows = ledgerRows.filter(r => !onlyTake || r.action === 'take');
+  $('ledger-summary').textContent = `${rows.length} 条 · 已核对 ${rows.filter(r => r.checked).length}`;
+  body.innerHTML = rows.map(r => {
+    const label = ACTION_LABELS[r.action] || r.action;
+    const voidTag = r.void ? ` <span class="kind-tag" style="color:var(--danger);border-color:var(--danger)">异常${r.note ? '：' + escHtml(r.note) : ''}</span>` : '';
+    const noteBtn = r.action === 'take' ? `<button class="btn-mini" data-ledger-note="${r.id}">备注</button>` : '';
+    const voidBtn = r.void ? `<button class="btn-mini" data-ledger-unvoid="${r.id}">恢复</button>` : `<button class="btn-mini danger" data-ledger-void="${r.id}">标异常</button>`;
+    return `<div class="wrow" style="align-items:center;border-bottom:1px solid var(--line);padding:5px 0;${r.void ? 'opacity:.6;' : ''}">
+      <input type="checkbox" data-ledger-check="${r.id}" ${r.checked ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--accent)" aria-label="已核对">
+      <div style="flex:1;min-width:0;font-size:12px;${r.void ? 'text-decoration:line-through;' : ''}">${label} ${escHtml(r.item_name)} <b>${r.delta > 0 ? '+' : ''}${r.delta}</b> → ${r.qty_after} · ${escHtml(r.character_name || '?')}/${escHtml(r.location)}${voidTag}<div class="hintline">${escHtml((r.ts || '').replace('T', ' ').slice(0, 19))}${r.checked ? ' · 已核对' : ''}</div></div>
+      ${noteBtn}${voidBtn}
+    </div>`;
+  }).join('') || '<div class="hintline">没有操作记录。</div>';
+  body.querySelectorAll('[data-ledger-check]').forEach(cb => cb.addEventListener('change', () => ledgerCheck(cb)));
+  body.querySelectorAll('[data-ledger-void]').forEach(b => b.addEventListener('click', () => openVoid(Number(b.dataset.ledgerVoid))));
+  body.querySelectorAll('[data-ledger-unvoid]').forEach(b => b.addEventListener('click', () => ledgerUnvoid(Number(b.dataset.ledgerUnvoid))));
+  body.querySelectorAll('[data-ledger-note]').forEach(b => b.addEventListener('click', () => openLedgerNote(Number(b.dataset.ledgerNote))));
+}
+async function ledgerCheck(cb) {
+  const id = Number(cb.dataset.ledgerCheck), checked = cb.checked;
+  const res = await postJSON('/api/ledger/check', { id, checked });
+  if (!res.ok) { toast(res.error || '标记失败', 'warn'); cb.checked = !checked; return; }
+  const r = ledgerRows.find(x => x.id === id); if (r) r.checked = checked ? 1 : 0;
+  renderLedger(); loadAudit();
+}
+async function batchCheck(checked) {
+  const onlyTake = $('log-only-take').checked;
+  const ids = ledgerRows.filter(r => !onlyTake || r.action === 'take').map(r => r.id);
+  if (!ids.length) { toast('没有要标记的记录', 'warn'); return; }
+  const res = await postJSON('/api/ledger/check_batch', { ids, checked });
+  if (!res.ok) { toast(res.error || '标记失败', 'warn'); return; }
+  toast(`已标记 ${res.count} 条`); loadLedger(); loadAudit();
+}
+function openVoid(id) {
+  const r = ledgerRows.find(x => x.id === id);
+  openModal('标异常', `
+    <div class="wform">
+      <div class="hintline">${escHtml(r ? r.item_name : '')} · 标异常后审计默认排除这条（可恢复）</div>
+      <div class="wfield"><label>原因（可空）</label><input type="text" id="void-note" placeholder="例如：记错了"></div>
+      <div class="wactions"><button class="btn-ghost" id="void-cancel">取消</button><button class="btn-danger" id="void-ok">标异常</button></div>
+    </div>`, (body, close) => {
+    $('void-cancel').addEventListener('click', close);
+    $('void-ok').addEventListener('click', async () => {
+      const res = await postJSON('/api/ledger/void', { id, void: true, note: $('void-note').value.trim() });
+      if (!res.ok) { toast(res.error || '失败', 'warn'); return; }
+      toast('已标异常'); close(); loadLedger(); loadAudit();
+    });
+  });
+}
+async function ledgerUnvoid(id) {
+  const res = await postJSON('/api/ledger/void', { id, void: false });
+  if (!res.ok) { toast(res.error || '失败', 'warn'); return; }
+  toast('已恢复'); loadLedger(); loadAudit();
+}
+function openLedgerNote(id) {
+  const r = ledgerRows.find(x => x.id === id);
+  openModal('改备注', `
+    <div class="wform">
+      <div class="wfield"><label>备注</label><input type="text" id="ln-note" value="${escHtml(r && r.note || '')}" placeholder="拿去做什么"></div>
+      <div class="wactions"><button class="btn-ghost" id="ln-cancel">取消</button><button class="btn-primary" id="ln-ok">保存</button></div>
+    </div>`, (body, close) => {
+    $('ln-cancel').addEventListener('click', close);
+    $('ln-ok').addEventListener('click', async () => {
+      const res = await postJSON('/api/ledger/note', { id, note: $('ln-note').value.trim() });
+      if (!res.ok) { toast(res.error || '失败', 'warn'); return; }
+      toast('已改备注'); close(); loadLedger();
+    });
+    setTimeout(() => $('ln-note').focus(), 40);
+  });
+}
+function loadDataTab() { loadSnapshots(); }
+function loadSettings() { $('mgr-settings').innerHTML = mgrPlaceholder('设置'); }
+function loadTools() {
+  const local = S.local !== false;
+  $('mgr-tools').innerHTML = `
+    <div class="mgr-section">
+      <div class="mgr-section-hd"><b>常见操作</b></div>
+      <div class="hintline" style="line-height:1.9"><b>记一笔</b> 入库或盘点，数字是覆盖不是累加。<br><b>改</b> 改数量/位置（换位置自动合并）。<b>搬</b> 挪到别的角色/位置，总数不变。<br><b>取</b> 用掉了，总数减少，取到 0 行消失。<b>删</b> 整行删掉（先快照）。<br><b>删栏位</b> 库存转入未确认。<b>撤销</b> Ctrl+Z 撤最近一次。</div>
+    </div>
+    ${local ? `<div class="mgr-section">
+      <div class="mgr-section-hd"><b>数据急救</b><span class="sub" id="guard-info">读取中…</span><button class="btn-mini" id="guard-backup">立即备份</button></div>
+      <div class="wrow" style="margin-bottom:8px"><button class="btn-ghost" id="guard-open-dir">打开数据目录</button></div>
+      <div class="wrow"><button class="btn-ghost" id="guard-pick">选择 stock.db…</button><span class="hintline" id="guard-picked">未选择文件</span><input type="file" id="guard-file" accept=".db,.sqlite,.sqlite3" hidden></div>
+      <div class="hintline warn" style="margin-top:8px">仅在更新失败或数据被改坏时使用。恢复会整体替换当前数据库，原库自动备份为 stock.bak-时间戳.db；成功后页面自动刷新。</div>
+      <div id="guard-preview"></div>
+    </div>` : ''}
+    <div class="mgr-section">
+      <div class="mgr-section-hd"><b>诊断</b><span class="sub">物品表与图标（图标探测最多 6 秒）</span><button class="btn-mini" id="btn-diag">运行诊断</button></div>
+      <pre id="diag-out" style="display:none;max-height:300px;overflow:auto;font-size:11px;white-space:pre-wrap;margin:0"></pre>
+    </div>`;
+  $('btn-diag').addEventListener('click', runDiag);
+  if (local) {
+    loadGuardInfo();
+    $('guard-backup').addEventListener('click', backupNow);
+    $('guard-open-dir').addEventListener('click', openDataDir);
+    $('guard-pick').addEventListener('click', () => $('guard-file').click());
+    $('guard-file').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) previewDb(f); });
+  }
+}
+async function postRaw(url, file, retried) {
+  const headers = {}; if (S.csrfToken) headers['X-CSRF-Token'] = S.csrfToken;
+  let res;
+  try { res = await fetch(CFG.baseUrl + url, { method: 'POST', headers, body: file }); }
+  catch (e) { return { ok: false, offline: true, error: '无法连接服务：若刚才提交过，请刷新页面核对' }; }
+  if (res.status === 403 && !retried) { await refreshCsrfToken(); return postRaw(url, file, true); }
+  if (res.status === 413) return { ok: false, error: '文件过大（上限 100MB）' };
+  let d; try { d = await res.json(); } catch (e) { return { ok: false, error: '服务端返回异常（HTTP ' + res.status + '）' }; }
+  return d;
+}
+async function loadGuardInfo() {
+  try { const d = await api('/api/data-dir'); $('guard-info').textContent = `${d.db} · ${Math.round((d.db_size || 0) / 1024)} KB` + ((d.sidecars || []).length ? ' · 有 WAL 旁文件' : ''); }
+  catch (e) { $('guard-info').textContent = '读取失败'; }
+}
+async function backupNow() { const d = await postJSON('/api/data/backup', {}); if (!d.ok) { toast(d.error || '备份失败', 'warn'); return; } toast('已备份：' + d.file); }
+async function openDataDir() { const d = await postJSON('/api/open-data-dir', {}); if (!d.ok) { toast(d.error || '打开失败', 'warn'); return; } toast('已打开数据目录'); }
+let guardFile = null;
+async function previewDb(file) {
+  if (file.size > 100 * 1024 * 1024) { toast('文件过大（上限 100MB）', 'warn'); return; }
+  const head = await file.slice(0, 16).text();
+  if (!head.startsWith('SQLite format 3')) { toast('这不是 SQLite 数据库文件（文件头不对）', 'warn'); return; }
+  guardFile = file;
+  $('guard-picked').textContent = file.name + '（' + Math.round(file.size / 1024) + ' KB）';
+  const box = $('guard-preview');
+  box.innerHTML = '<div class="hintline">预览中…</div>';
+  const d = await postRaw('/api/db/preview', file);
+  if (!d.ok) { box.innerHTML = '<div class="hintline bad">预览失败：' + escHtml(d.error || '') + '</div>'; return; }
+  if (!d.valid) { box.innerHTML = '<div class="hintline bad">' + escHtml((d.warnings || []).join('；') || '文件不完整') + '</div>'; return; }
+  const inc = d.incoming || {}, cur = d.current || {};
+  box.innerHTML = `
+    <table class="mgr-table" style="margin-top:8px"><thead><tr><th></th><th class="num">角色</th><th class="num">库存行</th><th class="num">流水</th></tr></thead>
+    <tbody><tr><td>当前</td><td class="num">${cur.characters}</td><td class="num">${cur.stock_rows}</td><td class="num">${cur.ledger_rows}</td></tr>
+    <tr><td>导入</td><td class="num">${inc.characters}</td><td class="num">${inc.stock_rows}</td><td class="num">${inc.ledger_rows}</td></tr></tbody></table>
+    ${(d.warnings || []).length ? '<div class="hintline warn">' + escHtml(d.warnings.join('；')) + '</div>' : ''}
+    <div class="wrow" style="margin-top:8px;justify-content:flex-end"><button class="btn-ghost" id="guard-cancel">取消</button><button class="btn-danger" id="guard-apply">导入并覆盖当前数据</button></div>`;
+  $('guard-cancel').addEventListener('click', () => { box.innerHTML = ''; guardFile = null; $('guard-picked').textContent = '未选择文件'; });
+  $('guard-apply').addEventListener('click', () => applyDb($('guard-apply')));
+}
+function applyDb(btn) {
+  if (!guardFile) return;
+  if (btn.dataset.armed === '1') {
+    btn.dataset.armed = ''; btn.disabled = true; btn.textContent = '导入中…';
+    postRaw('/api/db/restore', guardFile).then(d => {
+      btn.disabled = false;
+      if (!d.ok || !d.replaced) { toast(d.error || '恢复失败', 'warn'); btn.textContent = '导入并覆盖当前数据'; return; }
+      toast(`已导入（${d.counts ? d.counts.stock : '?'} 行库存），备份 ${d.backup || '无'}，即将刷新`);
+      setTimeout(() => location.reload(), 1400);
+    });
+  } else {
+    btn.dataset.armed = '1'; btn.classList.add('armed'); btn.textContent = '确认覆盖';
+    toast('再点一次确认：整体替换当前数据库（3 秒内，原库自动备份）', 'warn');
+    setTimeout(() => { if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.classList.remove('armed'); btn.textContent = '导入并覆盖当前数据'; } }, 3000);
+  }
+}
+async function runDiag() {
+  const out = $('diag-out'); out.style.display = 'block'; out.textContent = '诊断中…（图标探测最多 6 秒）';
+  try { const d = await api('/api/diag'); out.textContent = JSON.stringify(d, null, 2); } catch (e) { out.textContent = '诊断失败：' + e.message; }
+}
+
+// ━━━━━ 快照管理（数据页签；恢复/删除/清理/下载本机限定） ━━━━━
+let mgrSnapshots = [];
+async function loadSnapshots() {
+  $('mgr-data').innerHTML = '<div class="mgr-section"><div class="mgr-section-hd"><b>快照</b><span class="sub">读取中…</span></div></div>';
+  let d;
+  try { d = await api('/api/snapshots'); } catch (e) { $('mgr-data').innerHTML = '<div class="mgr-section"><div class="mgr-section-hd"><b>快照</b></div><div class="hintline bad">读取失败：' + escHtml(e.message) + '</div></div>'; return; }
+  mgrSnapshots = d.snapshots || [];
+  renderSnapshots(d.keep || 30);
+}
+function renderSnapshots(keep) {
+  const legacy = mgrSnapshots.filter(s => s.legacy);
+  const list = mgrSnapshots.filter(s => !s.legacy);
+  const local = S.local !== false;
+  const rows = list.map(s => {
+    const kindLabel = { manual: '手动', 'pre-restore': '恢复前', auto: '自动' }[s.kind] || s.kind;
+    const behind = s.behind_ops > 0 ? ` <span class="kind-tag" title="快照之后还有 ${s.behind_ops} 条操作，恢复会丢失这些">${s.behind_ops} 条在后</span>` : '';
+    const localBtns = local ? `<button class="btn-mini" data-snap-restore="${escHtml(s.name)}" data-behind="${s.behind_ops || 0}">恢复</button><a class="btn-mini" href="${CFG.baseUrl}/api/snapshot/download?name=${encodeURIComponent(s.name)}" download>下载</a><button class="btn-mini danger" data-snap-del="${escHtml(s.name)}">删</button>` : '';
+    return `<div class="wrow" style="align-items:center;border-bottom:1px solid var(--line);padding:7px 0">
+      <div style="flex:1;min-width:0;font-size:12px"><span class="kind-tag">${kindLabel}</span> ${escHtml(s.note || s.name)}${behind}<div class="hintline">${escHtml((s.ts || '').replace('T', ' ').slice(0, 19))} · ${Math.round((s.size || 0) / 1024)} KB</div></div>
+      <button class="btn-mini" data-snap-preview="${escHtml(s.name)}">预览</button>${localBtns}
+    </div>`;
+  }).join('');
+  $('mgr-data').innerHTML = `
+    <div class="mgr-section">
+      <div class="mgr-section-hd"><b>快照</b><span class="sub">${list.length} 个 · 自动保留最近 ${keep} 个</span></div>
+      <div class="wrow" style="margin-bottom:10px"><input type="text" id="snap-note" placeholder="手动快照备注（可空）" style="flex:1"><button class="btn-ghost" id="snap-create">立即打快照</button>${local && legacy.length ? `<button class="btn-ghost" id="snap-cleanup">清理旧快照（${legacy.length}）</button>` : ''}</div>
+      ${rows || '<div class="hintline">还没有快照。任意一次存/取/改之后会自动生成。</div>'}
+      <div id="snap-preview"></div>
+    </div>`;
+  $('snap-create').addEventListener('click', createSnapshot);
+  if ($('snap-cleanup')) $('snap-cleanup').addEventListener('click', cleanupSnapshots);
+  $('mgr-data').querySelectorAll('[data-snap-preview]').forEach(b => b.addEventListener('click', () => previewSnapshot(b.dataset.snapPreview)));
+  $('mgr-data').querySelectorAll('[data-snap-restore]').forEach(b => b.addEventListener('click', () => restoreSnapshot(b)));
+  $('mgr-data').querySelectorAll('[data-snap-del]').forEach(b => b.addEventListener('click', () => deleteSnapshot(b)));
+}
+async function createSnapshot() {
+  const res = await postJSON('/api/snapshot/create', { note: $('snap-note').value.trim() });
+  if (!res.ok) { toast(res.error || '快照失败', 'warn'); return; }
+  toast('已打快照：' + res.name); $('snap-note').value = ''; loadSnapshots();
+}
+async function previewSnapshot(name) {
+  const box = $('snap-preview');
+  box.innerHTML = '<div class="hintline">读取预览…</div>';
+  let d;
+  try { d = await api('/api/snapshot/preview?name=' + encodeURIComponent(name)); } catch (e) { box.innerHTML = '<div class="hintline bad">预览失败：' + escHtml(e.message) + '</div>'; return; }
+  if (!d.ok) { box.innerHTML = '<div class="hintline bad">' + escHtml(d.error || '预览失败') + '</div>'; return; }
+  const items = (d.items || []).map(it => `<div class="hintline">${it.hq ? '<span class="badge-hq">HQ</span> ' : ''}${escHtml(it.name)} <b>${fmtNum(it.total)}</b> · ${(it.holders || []).map(h => escHtml(h.character) + '/' + escHtml(h.location) + ' ' + h.qty).join('，')}</div>`).join('');
+  box.innerHTML = `<div class="mgr-section" style="margin-top:10px;background:var(--panel-2)"><div class="mgr-section-hd"><b>预览 · ${escHtml(d.name)}</b><span class="sub">流水 ${d.ledger_count} 条</span><button class="btn-mini" id="snap-preview-close">收起</button></div>${items || '<div class="hintline">空快照</div>'}</div>`;
+  $('snap-preview-close').addEventListener('click', () => box.innerHTML = '');
+}
+function restoreSnapshot(btn) {
+  const name = btn.dataset.snapRestore, behind = Number(btn.dataset.behind) || 0;
+  if (btn.dataset.armed === '1') {
+    btn.dataset.armed = ''; btn.classList.remove('armed'); btn.disabled = true; btn.textContent = '恢复中…';
+    postJSON('/api/snapshot/restore', { name }).then(res => {
+      btn.disabled = false;
+      if (!res.ok) { toast(res.error || '恢复失败', 'warn'); btn.textContent = '恢复'; return; }
+      toast(`已恢复快照（${res.counts ? res.counts.stock : '?'} 行库存），备份 ${res.backup || '无'}，即将刷新`);
+      setTimeout(() => location.reload(), 1200);
+    });
+  } else {
+    btn.dataset.armed = '1'; btn.classList.add('armed'); btn.textContent = '确认恢复';
+    toast(behind > 0 ? `再点一次恢复：快照之后 ${behind} 条操作会丢失（3 秒内）` : '再点一次确认恢复（3 秒内，会先备份当前库）', 'warn');
+    setTimeout(() => { if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.classList.remove('armed'); btn.textContent = '恢复'; } }, 3000);
+  }
+}
+function deleteSnapshot(btn) {
+  const name = btn.dataset.snapDel;
+  if (btn.dataset.armed === '1') {
+    btn.dataset.armed = ''; btn.classList.remove('armed'); btn.disabled = true;
+    postJSON('/api/snapshot/delete', { name }).then(res => {
+      btn.disabled = false;
+      if (!res.ok) { toast(res.error || '删除失败', 'warn'); btn.textContent = '删'; return; }
+      toast('已删除快照'); loadSnapshots();
+    });
+  } else {
+    btn.dataset.armed = '1'; btn.classList.add('armed'); btn.textContent = '确认';
+    toast('再点一次确认删除该快照（3 秒内）', 'warn');
+    setTimeout(() => { if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.classList.remove('armed'); btn.textContent = '删'; } }, 3000);
+  }
+}
+async function cleanupSnapshots() {
+  const res = await postJSON('/api/snapshot/cleanup', {});
+  if (!res.ok) { toast(res.error || '清理失败', 'warn'); return; }
+  toast('已清理 ' + res.removed + ' 个旧快照'); loadSnapshots();
+}
+$('btn-manage').addEventListener('click', () => openManage());
+$('mgr-close').addEventListener('click', closeManage);
+$('mgr-mask').addEventListener('click', closeManage);
+document.querySelectorAll('.mgr-tabs [role=tab]').forEach(b => b.addEventListener('click', () => switchMgrTab(b.dataset.mtab)));
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('mgr-drawer').classList.contains('open') && $('wmodal-overlay').hidden && $('picker-overlay').hidden) closeManage(); });
 
 // ━━━━━ 启动 ━━━━━
 $('config-url').value = CFG.baseUrl || location.origin;
