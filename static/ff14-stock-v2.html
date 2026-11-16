@@ -2309,7 +2309,7 @@ async function openFcMerge(fcId) {
     <div class="mgr-section" style="background:var(--panel-2);margin-bottom:8px">
       <div class="mgr-section-hd"><b>${escHtml(g.item_name)}${g.hq ? ' <span class="badge-hq">HQ</span>' : ''}</b><span class="sub">${(g.rows || []).length} 行重复</span></div>
       ${(g.rows || []).map(r => `<div class="hintline">${escHtml(r.character)} · ${r.qty} 件 · ${escHtml(r.age_text || '')} <label class="wcheck" style="font-size:11px"><input type="radio" name="keep-${gi}" value="${r.stock_id}" ${r.character === g.suggested_from ? 'checked' : ''}> 保留此行</label></div>`).join('')}
-      <div class="wrow" style="margin-top:6px"><label class="hintline" style="flex:0 0 auto">归并后总数</label><input type="number" data-merge-qty="${gi}" value="${g.suggested_qty}" min="1" max="9999999" style="flex:1;height:28px"></div>
+      <div class="wrow" style="margin-top:6px"><label class="hintline" style="flex:0 0 auto">归并后总数</label><input type="number" data-merge-qty="${gi}" value="${g.suggested_qty}" min="1" max="9999999" step="1" style="flex:1;height:28px"></div>
     </div>`).join('');
   openModal(`部队归并 · ${escHtml(fc ? fc.name : '')}`, `<div class="wform"><div class="hintline">同一材料多行合并为一行。选择保留行，确认最终总数（默认取最新行数量，会先打快照）。</div>${body}<div class="wactions"><button class="btn-ghost" id="merge-cancel">取消</button><button class="btn-primary" id="merge-apply">确认归并</button></div></div>`, (b, close) => {
     $('merge-cancel').addEventListener('click', close);
@@ -2321,7 +2321,7 @@ async function openFcMerge(fcId) {
         if (keepRadio && Number.isFinite(Number(keepRadio.value))) it.keep_stock_id = Number(keepRadio.value);
         return it;
       });
-      if (items.some(it => !Number.isFinite(it.qty) || it.qty < 1)) { toast('归并总数要是 ≥1 的整数', 'warn'); return; }
+      if (items.some(it => !Number.isInteger(it.qty) || it.qty < 1)) { toast('归并总数要是 ≥1 的整数', 'warn'); return; }
       const res = await postJSON('/api/fc/merge/apply', { fc_id: fcId, items });
       if (!res.ok) { toast(res.error || '归并失败', 'warn'); return; }
       toast(`已归并 ${res.merged} 项`); close(); loadFc(); refreshAfterWrite();
