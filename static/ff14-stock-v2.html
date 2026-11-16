@@ -201,6 +201,15 @@ button:disabled { opacity: .45; cursor: default; }
 .mgr-table td { padding: 6px; border-bottom: 1px solid var(--line); }
 .mgr-table th.num, .mgr-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 body.hide-cost .cost-note, body.hide-cost .cost-row, body.hide-cost .cost-field { display: none !important; }
+.badge-line { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; font-size: 10px; padding: 0 4px; cursor: pointer; flex-shrink: 0; }
+.topbar-actions .btn-ghost.safety-low { color: var(--warn); border-color: var(--warn); }
+.sug-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 12px; }
+.sug-chip { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); border-radius: 20px; padding: 3px 12px; font-size: 12px; }
+.sug-chip:hover { filter: brightness(1.05); }
+.exit-btn { position: fixed; right: 16px; bottom: 24px; z-index: 55; background: var(--danger); color: #fff; border-radius: 6px; padding: 0 16px; height: 36px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow-lg); }
+.exit-btn.armed { outline: 2px solid var(--danger); outline-offset: 2px; }
+.item-list.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
+@media (max-width: 768px) { .item-list.two-col { grid-template-columns: 1fr; } }
 .item-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
   font-size: 12px; color: var(--muted); white-space: nowrap; }
 .stale-indicator { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
@@ -496,6 +505,7 @@ body.hide-cost .cost-note, body.hide-cost .cost-row, body.hide-cost .cost-field 
     </div>
     <button class="btn-ghost" id="btn-toggle-filter">筛选</button>
     <button class="btn-ghost" id="btn-record">记一笔</button>
+    <button class="btn-ghost" id="btn-layout" title="切换一排/两排">一排</button>
   </div>
   <div class="filter-expanded" id="filter-expanded" hidden>
     <select id="f-account"><option value="">全部账号</option></select>
@@ -525,6 +535,7 @@ body.hide-cost .cost-note, body.hide-cost .cost-row, body.hide-cost .cost-field 
   </aside>
 </div>
 
+<button class="exit-btn" id="exit-btn" hidden>退出</button>
 <div class="toast" id="toast"></div>
 <div class="drawer-mask" id="drawer-mask" hidden></div>
 <div class="drawer" id="detail-drawer">
@@ -726,6 +737,7 @@ async function refreshAfterWrite() {
     const b = $('btn-pending'); if (S.pending_rows > 0) { b.textContent = `未确认 ${S.pending_rows}`; b.hidden = false; } else b.hidden = true;
     populateFilters();
   } catch (e) {}
+  await refreshSafety();
   await search();
 }
 
@@ -747,6 +759,8 @@ async function init() {
     S.local = st.local !== false;
     try { S.hideCost = localStorage.getItem('ff14hidecost') === '1'; } catch (e) { S.hideCost = false; }
     document.body.classList.toggle('hide-cost', S.hideCost);
+    if (S.local) $('exit-btn').hidden = false;
+    applyLayout();
     S.locations = st.locations || []; S.characters = ch.characters || [];
     if (st.retainer_max) for (const k in st.retainer_max) retainerMax[k] = Math.max(Number(retainerMax[k]) || 0, Number(st.retainer_max[k]));
     S.character_count = st.character_count || 0; S.stock_rows = st.stock_rows || 0;
@@ -758,6 +772,7 @@ async function init() {
     if (S.pending_rows > 0) { const b = $('btn-pending'); b.textContent = `未确认 ${S.pending_rows}`; b.hidden = false; }
     populateFilters();
     $('config-overlay').hidden = true;
+    await refreshSafety();
     await search();
   } catch (e) { showListError(e.message); }
 }
@@ -791,6 +806,7 @@ async function search() {
     S.items = d.items || []; S.truncated = d.truncated || false;
     buildQtyIndex(S.items); learnRetainers(S.items);
     S.total_items = d.total_items || 0; S.hint = d.hint || '';
+    S.suggestions = d.suggestions || [];
     if (d.stats) {
       S.stock_rows = d.stats.stock_rows ?? S.stock_rows; S.total_qty = d.stats.total_qty ?? S.total_qty;
       $('stat-rows').textContent = fmtNum(S.stock_rows); $('stat-qty').textContent = fmtNum(S.total_qty);
@@ -930,7 +946,7 @@ function buildItemCard(it) {
       <img data-icon="${iconId}" src="" alt="" loading="lazy" style="display:none">
     </div>
     <div class="item-info">
-      <div class="item-name-row"><span class="item-name">${escHtml(it.name)}</span>${hqBadge}</div>
+      <div class="item-name-row"><span class="item-name">${escHtml(it.name)}</span>${hqBadge}${safetyMap[it.item_id] ? `<span class="badge-line" data-action="card-safety" data-id="${cardId}" title="安全线 ${safetyMap[it.item_id].min_qty}，点击设置">线 ${safetyMap[it.item_id].min_qty}</span>` : ''}</div>
       ${alias}
       ${buildCostNote(it)}
     </div>
@@ -978,11 +994,13 @@ function skeletonHTML(n) {
 function emptyHTML() {
   const hints = { no_stock: '物品库中有，但库存里没有', no_item: '物品库中也找不到', '': '没有符合条件的记录' };
   const msg = hints[S.hint] || hints[''];
+  const chips = (S.suggestions || []).slice(0, 8).map(s => `<button class="sug-chip" data-suggest="${escHtml(s.name)}">${escHtml(s.name)}</button>`).join('');
   return `<div class="state-empty">
     <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
       <path d="M8 40L24 8L40 40H8Z" stroke="currentColor" stroke-width="2" fill="none"/>
       <path d="M24 24v6M24 34v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg><div>库存为空</div><div style="font-size:12px">${escHtml(msg)}</div></div>`;
+    </svg><div>库存为空</div><div style="font-size:12px">${escHtml(msg)}</div>
+    ${chips ? `<div class="sug-chips">${chips}</div>` : ''}</div>`;
 }
 
 function showListError(msg) {
@@ -1096,6 +1114,8 @@ document.addEventListener('click', e => {
   if (batchEl) { openBatches(batchEl.dataset.batchName, Number(batchEl.dataset.batchHq)); return; }
   const btn = e.target.closest('[data-action]');
   if (!btn) {
+    const sugChip = e.target.closest('[data-suggest]');
+    if (sugChip) { $('q-input').value = sugChip.dataset.suggest; S.q = sugChip.dataset.suggest; $('btn-clear-q').hidden = false; scheduleSearch(0); return; }
     const clearBtn = e.target.closest('[data-clear]');
     if (clearBtn) {
       const key = clearBtn.dataset.clear; S[key] = '';
@@ -1121,6 +1141,12 @@ document.addEventListener('click', e => {
   if (action === 'move') { openMove(btn); return; }
   if (action === 'take') { openTake(btn); return; }
   if (action === 'del') { deleteRow(btn); return; }
+  if (action === 'card-safety') {
+    selectItem(btn.dataset.id);
+    const form = $('detail-safety-form');
+    if (form) { form.hidden = false; const q = $('detail-safety-qty'); if (q) q.focus(); }
+    return;
+  }
   if (action === 'set-safety') {
     const form = $('detail-safety-form');
     form.hidden = !form.hidden;
@@ -1162,6 +1188,13 @@ document.addEventListener('keydown', e => {
     e.preventDefault(); quickUndo();
   }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'H' || e.key === 'h')) { e.preventDefault(); setHideCost(!S.hideCost); }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); $('q-input').focus(); $('q-input').select(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    if (e.target && e.target.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    if (!$('wmodal-overlay').hidden) { if ($('rec-save')) saveStock(); }
+    else openRecord();
+  }
   if (e.key === 'Escape' && undoArmed) disarmUndo();
 });
 $('btn-export').addEventListener('click', async () => {
@@ -1199,9 +1232,22 @@ async function deleteSafetyLine(itemId) {
   toast('安全线已移除'); loadSafetyLines();
 }
 
+let safetyMap = {};
+function applySafetyBadge(d) {
+  safetyMap = {};
+  (d.lines || []).forEach(ln => { safetyMap[ln.item_id] = ln; });
+  const low = d.low_count || 0;
+  const b = $('btn-safety');
+  b.textContent = low > 0 ? `安全线 ⚠${low}` : '安全线';
+  b.classList.toggle('safety-low', low > 0);
+  b.title = low > 0 ? `${low} 种材料低于安全线` : '查看安全线';
+}
+async function refreshSafety() { try { applySafetyBadge(await api('/api/stock/safety-lines')); } catch (e) {} }
 async function loadSafetyLines() {
   try {
-    renderSafetyModal(await api('/api/stock/safety-lines'));
+    const d = await api('/api/stock/safety-lines');
+    applySafetyBadge(d);
+    renderSafetyModal(d);
   } catch (e) {
     toast(e.message, 'warn');
   }
@@ -2180,11 +2226,12 @@ async function loadFc() {
   const fcs = d.fcs || [];
   $('fc-hint').textContent = fcs.length ? `${fcs.length} 个部队` : '还没有部队';
   $('fc-body').innerHTML = fcs.length ? fcs.map(fc => `<div style="border-bottom:1px solid var(--line);padding:8px 0">
-    <div class="wrow" style="align-items:center"><b style="flex:1;font-size:13px">${escHtml(fc.name)}${fc.world ? '@' + escHtml(fc.world) : ''}</b><span class="hintline">${fc.stock_rows} 行 · ${fc.stock_qty} 件</span><button class="btn-mini" data-fc-rename="${fc.id}">改名</button><button class="btn-mini danger" data-fc-disband="${fc.id}">解散</button></div>
+    <div class="wrow" style="align-items:center"><b style="flex:1;font-size:13px">${escHtml(fc.name)}${fc.world ? '@' + escHtml(fc.world) : ''}</b><span class="hintline">${fc.stock_rows} 行 · ${fc.stock_qty} 件</span><button class="btn-mini" data-fc-merge="${fc.id}">归并</button><button class="btn-mini" data-fc-rename="${fc.id}">改名</button><button class="btn-mini danger" data-fc-disband="${fc.id}">解散</button></div>
     <div class="hintline" style="margin:4px 0">成员：${(fc.members || []).map(m => `${escHtml(m.name)} <button class="btn-mini" data-fc-remove="${fc.id}" data-char="${m.id}" style="padding:0 4px">✕</button>`).join('、') || '无'}</div>
     <div class="wrow"><select data-fc-joinsel="${fc.id}" style="flex:1;height:28px"><option value="">加入角色…</option>${S.characters.filter(c => !(fc.members || []).some(m => m.id === c.id)).map(c => `<option value="${c.id}">${escHtml(c.name)}@${escHtml(c.world)}</option>`).join('')}</select><button class="btn-mini" data-fc-join="${fc.id}">加入</button></div>
   </div>`).join('') : '<div class="hintline">还没有部队。创建一个，然后把角色加进去。</div>';
   $('fc-body').querySelectorAll('[data-fc-rename]').forEach(b => b.addEventListener('click', () => renameFc(Number(b.dataset.fcRename))));
+  $('fc-body').querySelectorAll('[data-fc-merge]').forEach(b => b.addEventListener('click', () => openFcMerge(Number(b.dataset.fcMerge))));
   $('fc-body').querySelectorAll('[data-fc-disband]').forEach(b => b.addEventListener('click', () => disbandFc(Number(b.dataset.fcDisband))));
   $('fc-body').querySelectorAll('[data-fc-remove]').forEach(b => b.addEventListener('click', () => joinFc(Number(b.dataset.fcRemove), 0)));
   $('fc-body').querySelectorAll('[data-fc-join]').forEach(b => b.addEventListener('click', () => { const sel = $('fc-body').querySelector(`[data-fc-joinsel="${b.dataset.fcJoin}"]`); const cid = Number(sel.value); if (!cid) { toast('选一个角色', 'warn'); return; } joinFc(Number(b.dataset.fcJoin), cid); }));
@@ -2224,6 +2271,34 @@ function disbandFc(id) {
   });
   });
 }
+async function openFcMerge(fcId) {
+  let d;
+  try { d = await api('/api/fc/conflicts?fc_id=' + fcId); } catch (e) { toast('读取冲突失败：' + e.message, 'warn'); return; }
+  const groups = d.groups || d.conflicts || [];
+  if (!groups.length) { toast('没有重复行需要归并'); return; }
+  const fc = (fcData.fcs || []).find(f => f.id === fcId);
+  const body = groups.map((g, gi) => `
+    <div class="mgr-section" style="background:var(--panel-2);margin-bottom:8px">
+      <div class="mgr-section-hd"><b>${escHtml(g.item_name)}${g.hq ? ' <span class="badge-hq">HQ</span>' : ''}</b><span class="sub">${(g.rows || []).length} 行重复</span></div>
+      ${(g.rows || []).map(r => `<div class="hintline">${escHtml(r.character)} · ${r.qty} 件 · ${escHtml(r.age_text || '')} <label class="wcheck" style="font-size:11px"><input type="radio" name="keep-${gi}" value="${r.stock_id}" ${r.character === g.suggested_from ? 'checked' : ''}> 保留此行</label></div>`).join('')}
+      <div class="wrow" style="margin-top:6px"><label class="hintline" style="flex:0 0 auto">归并后总数</label><input type="number" data-merge-qty="${gi}" value="${g.suggested_qty}" min="0" max="9999999" style="flex:1;height:28px"></div>
+    </div>`).join('');
+  openModal(`部队归并 · ${escHtml(fc ? fc.name : '')}`, `<div class="wform"><div class="hintline">同一材料多行合并为一行。选择保留行，确认最终总数（默认取最新行数量，会先打快照）。</div>${body}<div class="wactions"><button class="btn-ghost" id="merge-cancel">取消</button><button class="btn-primary" id="merge-apply">确认归并</button></div></div>`, (b, close) => {
+    $('merge-cancel').addEventListener('click', close);
+    $('merge-apply').addEventListener('click', async () => {
+      const items = groups.map((g, gi) => {
+        const keepRadio = b.querySelector(`[name="keep-${gi}"]:checked`);
+        const qty = Number(b.querySelector(`[data-merge-qty="${gi}"]`).value);
+        const it = { item_name: g.item_name, hq: g.hq ? 1 : 0, qty };
+        if (keepRadio) it.keep_stock_id = Number(keepRadio.value);
+        return it;
+      });
+      const res = await postJSON('/api/fc/merge/apply', { fc_id: fcId, items });
+      if (!res.ok) { toast(res.error || '归并失败', 'warn'); return; }
+      toast(`已归并 ${res.merged} 项`); close(); loadFc(); refreshAfterWrite();
+    });
+  }, true);
+}
 function loadTools() {
   const local = S.local !== false;
   $('mgr-tools').innerHTML = `
@@ -2238,6 +2313,10 @@ function loadTools() {
       <div class="hintline warn" style="margin-top:8px">仅在更新失败或数据被改坏时使用。恢复会整体替换当前数据库，原库自动备份为 stock.bak-时间戳.db；成功后页面自动刷新。</div>
       <div id="guard-preview"></div>
     </div>` : ''}
+    ${local ? `<div class="mgr-section">
+      <div class="mgr-section-hd"><b>数据表维护</b><span class="sub">重新下载并构建（耗时较长）</span></div>
+      <div class="wrow"><button class="btn-ghost" id="rebuild-recipe">重建配方表</button><button class="btn-ghost" id="rebuild-npc">重建 NPC 商店表</button></div>
+    </div>` : ''}
     <div class="mgr-section">
       <div class="mgr-section-hd"><b>诊断</b><span class="sub">物品表与图标（图标探测最多 6 秒）</span><button class="btn-mini" id="btn-diag">运行诊断</button></div>
       <pre id="diag-out" style="display:none;max-height:300px;overflow:auto;font-size:11px;white-space:pre-wrap;margin:0"></pre>
@@ -2249,7 +2328,15 @@ function loadTools() {
     $('guard-open-dir').addEventListener('click', openDataDir);
     $('guard-pick').addEventListener('click', () => $('guard-file').click());
     $('guard-file').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) previewDb(f); });
+    $('rebuild-recipe').addEventListener('click', () => rebuildTable('recipe'));
+    $('rebuild-npc').addEventListener('click', () => rebuildTable('npc'));
   }
+}
+async function rebuildTable(kind) {
+  toast(kind === 'recipe' ? '重建配方表中…（耗时较长）' : '重建 NPC 表中…（耗时较长）');
+  const d = await postJSON(kind === 'recipe' ? '/api/recipe/rebuild' : '/api/npc/rebuild', {});
+  if (!d.ok) { toast(d.error || '重建失败', 'warn'); return; }
+  toast('重建完成');
 }
 async function postRaw(url, file, retried) {
   const headers = {}; if (S.csrfToken) headers['X-CSRF-Token'] = S.csrfToken;
@@ -2401,6 +2488,25 @@ $('mgr-close').addEventListener('click', closeManage);
 $('mgr-mask').addEventListener('click', closeManage);
 document.querySelectorAll('.mgr-tabs [role=tab]').forEach(b => b.addEventListener('click', () => switchMgrTab(b.dataset.mtab)));
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('mgr-drawer').classList.contains('open') && $('wmodal-overlay').hidden && $('picker-overlay').hidden) closeManage(); });
+
+// ━━━━━ 退出（本机限定，两次确认） ━━━━━
+let exitArmed = false, exitTimer = null;
+function disarmExit() { exitArmed = false; clearTimeout(exitTimer); const b = $('exit-btn'); b.classList.remove('armed'); b.textContent = '退出'; }
+$('exit-btn').addEventListener('click', async () => {
+  const b = $('exit-btn');
+  if (!exitArmed) { exitArmed = true; b.classList.add('armed'); b.textContent = '确认退出'; toast('再点一次将退出程序（5 秒内，按 Esc 取消）', 'warn'); exitTimer = setTimeout(disarmExit, 5000); return; }
+  disarmExit(); b.disabled = true; b.textContent = '退出中…';
+  const d = await postJSON('/api/exit', {});
+  if (!d.ok) { toast(d.error || '退出失败', 'warn'); b.disabled = false; b.textContent = '退出'; return; }
+  document.body.innerHTML = '<div style="padding:80px 24px;text-align:center;font-size:18px;line-height:2">程序已退出，黑窗口已关闭。<br>可以关闭此页面了。</div>';
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && exitArmed) disarmExit(); });
+
+// ━━━━━ 布局模式（一排/两排） ━━━━━
+let layoutMode = 'one';
+try { layoutMode = localStorage.getItem('layoutMode') === 'two' ? 'two' : 'one'; } catch (e) {}
+function applyLayout() { $('item-list').classList.toggle('two-col', layoutMode === 'two'); const b = $('btn-layout'); if (b) b.textContent = layoutMode === 'two' ? '两排' : '一排'; }
+$('btn-layout').addEventListener('click', () => { layoutMode = layoutMode === 'two' ? 'one' : 'two'; try { localStorage.setItem('layoutMode', layoutMode); } catch (e) {} applyLayout(); });
 
 // ━━━━━ 启动 ━━━━━
 $('config-url').value = CFG.baseUrl || location.origin;
