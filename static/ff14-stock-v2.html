@@ -200,6 +200,7 @@ button:disabled { opacity: .45; cursor: default; }
 .mgr-table th { text-align: left; padding: 6px; border-bottom: 2px solid var(--line); color: var(--muted); font-weight: 600; }
 .mgr-table td { padding: 6px; border-bottom: 1px solid var(--line); }
 .mgr-table th.num, .mgr-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+body.hide-cost .cost-note, body.hide-cost .cost-row, body.hide-cost .cost-field { display: none !important; }
 .item-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
   font-size: 12px; color: var(--muted); white-space: nowrap; }
 .stale-indicator { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
@@ -744,6 +745,8 @@ async function init() {
     const [st, ch] = await Promise.all([api('/api/state'), api('/api/characters')]);
     S.csrfToken = st.csrf_token || ''; S.version = st.version || ''; S.stale_days = st.stale_days || 7;
     S.local = st.local !== false;
+    try { S.hideCost = localStorage.getItem('ff14hidecost') === '1'; } catch (e) { S.hideCost = false; }
+    document.body.classList.toggle('hide-cost', S.hideCost);
     S.locations = st.locations || []; S.characters = ch.characters || [];
     if (st.retainer_max) for (const k in st.retainer_max) retainerMax[k] = Math.max(Number(retainerMax[k]) || 0, Number(st.retainer_max[k]));
     S.character_count = st.character_count || 0; S.stock_rows = st.stock_rows || 0;
@@ -1158,6 +1161,7 @@ document.addEventListener('keydown', e => {
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
     e.preventDefault(); quickUndo();
   }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'H' || e.key === 'h')) { e.preventDefault(); setHideCost(!S.hideCost); }
   if (e.key === 'Escape' && undoArmed) disarmUndo();
 });
 $('btn-export').addEventListener('click', async () => {
@@ -1314,7 +1318,7 @@ function openRecord(prefill) {
         <div class="qty-three"><input type="text" inputmode="numeric" id="rec-total" class="qt-total" placeholder="如 1523"><input type="text" inputmode="numeric" id="rec-group" class="qt-part" placeholder="组"><span class="unit">组</span><input type="text" inputmode="numeric" id="rec-rest" class="qt-part" placeholder="余"><span class="unit">余</span></div>
         <div class="hintline" id="rec-qty-hint"></div>
       </div>
-      <div class="wfield"><label>买入单价（可空，填了才计入成本）</label><input type="text" inputmode="numeric" id="rec-price" placeholder="gil / 个"><div class="hintline" id="rec-cost">—</div></div>
+      <div class="wfield cost-field"><label>买入单价（可空，填了才计入成本）</label><input type="text" inputmode="numeric" id="rec-price" placeholder="gil / 个"><div class="hintline" id="rec-cost">—</div></div>
       <label class="wcheck"><input type="checkbox" id="rec-hq"> HQ（高质量）</label>
       <div class="hintline" id="rec-hint"></div>
       <div class="form-error" id="rec-error" hidden><span class="msg" id="rec-error-text"></span><button id="rec-error-retry">重试</button><button id="rec-error-close">×</button></div>
@@ -2055,8 +2059,171 @@ function openLedgerNote(id) {
     setTimeout(() => $('ln-note').focus(), 40);
   });
 }
-function loadDataTab() { loadSnapshots(); }
-function loadSettings() { $('mgr-settings').innerHTML = mgrPlaceholder('设置'); }
+function loadDataTab() {
+  $('mgr-data').innerHTML = `
+    <div id="mgr-snap"></div>
+    <div class="mgr-section">
+      <div class="mgr-section-hd"><b>对账</b><span class="sub" id="recon-summary">库存 vs 流水累计</span><button class="btn-mini" id="recon-run">检查</button></div>
+      <div id="recon-list"><div class="hintline">点「检查」比较当前库存与流水累计是否一致</div></div>
+    </div>
+    <div class="mgr-section cost-field">
+      <div class="mgr-section-hd"><b>成本总览</b><span class="sub" id="cost-summary"></span><button class="btn-mini" id="cost-refresh">刷新</button></div>
+      <div id="cost-table"><div class="hintline">读取中…</div></div>
+    </div>
+    <div class="mgr-section">
+      <div class="mgr-section-hd"><b>名字映射</b><span class="sub" id="map-count"></span></div>
+      <div id="map-list"></div>
+      <div class="wrow" style="margin-top:8px"><input type="text" id="map-item" placeholder="物品名，或 #ID（如 #5057）" style="flex:1"><input type="text" id="map-alias" placeholder="备注名，例如 铁锭" style="flex:1"><button class="btn-ghost" id="map-add">添加</button></div>
+    </div>`;
+  loadSnapshots();
+  $('recon-run').addEventListener('click', loadReconcile);
+  $('cost-refresh').addEventListener('click', loadCostOverview);
+  $('map-add').addEventListener('click', addAlias);
+  loadCostOverview(); loadAliases();
+}
+const RECON_TYPE_LABEL = { ledger_only: '库存缺整格', stock_only: '无流水', qty_diff: '数量不一致' };
+async function loadReconcile() {
+  const box = $('recon-list'); box.innerHTML = '<div class="hintline">检查中…</div>';
+  let d; try { d = await api('/api/reconcile'); } catch (e) { box.innerHTML = '<div class="hintline bad">检查失败：' + escHtml(e.message) + '</div>'; return; }
+  if (!d.ok) { box.innerHTML = '<div class="hintline bad">' + escHtml(d.error || '检查失败') + '</div>'; return; }
+  $('recon-summary').textContent = `比对 ${d.checked} 格 · ${d.issues.length} 处不一致`;
+  if (!d.issues.length) { box.innerHTML = '<div class="hintline" style="color:var(--ok)">库存与流水累计一致 ✓</div>'; return; }
+  box.innerHTML = d.issues.map(it => `<div class="hintline warn" style="border-bottom:1px solid var(--line);padding:5px 0"><b>${RECON_TYPE_LABEL[it.type] || it.type}</b> ${escHtml(it.item_name)}${it.hq_any ? ' <span class="badge-hq">含HQ</span>' : ''} · ${escHtml(it.character)}/${escHtml(it.location)}<div class="hintline">库存 ${it.current} · 流水应为 ${it.expected} · 差 ${it.diff > 0 ? '+' : ''}${it.diff}</div></div>`).join('');
+}
+async function loadCostOverview() {
+  const box = $('cost-table'); if (!box) return;
+  let ov; try { ov = await api('/api/cost/overview'); } catch (e) { box.innerHTML = '<div class="hintline bad">读取失败</div>'; return; }
+  $('cost-summary').textContent = `全量 ${ov.items_total} 种 · 有价 ${ov.items_with_cost} 种 · 估值 ${fmtNum(Math.round(ov.total_value))} gil`;
+  let d; try { d = await api('/api/search?q=&limit_items=200'); } catch (e) { box.innerHTML = '<div class="hintline bad">明细读取失败</div>'; return; }
+  const items = (d.items || []).filter(it => it.spent > 0).sort((a, b) => b.spent - a.spent).slice(0, 40);
+  box.innerHTML = items.length ? `<table class="mgr-table"><thead><tr><th>材料（按估值）</th><th class="num">数量</th><th class="num">均价</th><th class="num">估值</th></tr></thead><tbody>${items.map(it => `<tr><td>${escHtml(it.name)}${it.hq ? ' <span class="badge-hq">HQ</span>' : ''}</td><td class="num">${fmtNum(it.total)}</td><td class="num">${fmtNum(Math.round(it.avg_cost))}</td><td class="num">${fmtNum(Math.round(it.spent))}</td></tr>`).join('')}</tbody></table><div class="hintline">列表只显示前 40 种</div>` : '<div class="hintline">还没有成本数据。</div>';
+}
+async function loadAliases() {
+  const box = $('map-list'); if (!box) return;
+  let d; try { d = await api('/api/aliases'); } catch (e) { box.innerHTML = '<div class="hintline bad">读取失败</div>'; return; }
+  const aliases = d.aliases || [];
+  $('map-count').textContent = aliases.length ? `${aliases.length} 条备注名` : '还没有备注名，可以在下面添加';
+  box.innerHTML = aliases.length ? aliases.map(a => `<div class="wrow" style="align-items:center;border-bottom:1px solid var(--line);padding:5px 0"><div style="flex:1;font-size:12px">${escHtml(a.alias)} → ${escHtml(a.item_name)} <span class="hintline">#${a.item_id}</span></div><button class="btn-mini danger" data-alias-del="${escHtml(a.alias)}">删</button></div>`).join('') : '<div class="hintline">（空）</div>';
+  box.querySelectorAll('[data-alias-del]').forEach(b => b.addEventListener('click', () => deleteAlias(b.dataset.aliasDel)));
+}
+async function addAlias() {
+  const itemRaw = $('map-item').value.trim(), alias = $('map-alias').value.trim();
+  if (!alias) { toast('填备注名', 'warn'); return; }
+  if (!itemRaw) { toast('填物品名或 #ID', 'warn'); return; }
+  let item_id;
+  if (/^#\d+$/.test(itemRaw)) item_id = Number(itemRaw.slice(1));
+  else { try { const d = await api('/api/item_search?q=' + encodeURIComponent(itemRaw)); const hit = (d.items || [])[0]; if (!hit) { toast('没找到这个物品', 'warn'); return; } item_id = hit.id; } catch (e) { toast('查询失败', 'warn'); return; } }
+  const res = await postJSON('/api/alias', { alias, item_id });
+  if (!res.ok) { toast(res.error || '绑定失败', 'warn'); return; }
+  toast(`已绑定：${alias} → ${res.item_name}`); $('map-item').value = ''; $('map-alias').value = '';
+  loadAliases(); refreshAfterWrite();
+}
+async function deleteAlias(alias) {
+  const res = await postJSON('/api/alias/delete', { alias });
+  if (!res.ok) { toast(res.error || '删除失败', 'warn'); return; }
+  toast('已删除备注名'); loadAliases(); refreshAfterWrite();
+}
+function loadSettings() {
+  const local = S.local !== false;
+  $('mgr-settings').innerHTML = `
+    <div class="mgr-section">
+      <div class="mgr-section-hd"><b>显示</b></div>
+      <label class="wcheck"><input type="checkbox" id="set-hide-cost" ${S.hideCost ? 'checked' : ''}> 隐藏成本（截图分享用）</label>
+      <div class="hintline" style="margin-top:6px">隐藏均价、估值、成本栏；快捷键 Ctrl+Shift+H 也能切换。</div>
+    </div>
+    ${local ? `<div class="mgr-section">
+      <div class="mgr-section-hd"><b>手机访问</b><span class="sub" id="lan-hint"></span></div>
+      <label class="wcheck"><input type="checkbox" id="lan-toggle"> 允许手机访问（同一 Wi-Fi）</label>
+      <div class="hintline" style="margin-top:6px">开启后，手机浏览器打开下面地址即可使用本页。</div>
+      <div id="lan-body" style="margin-top:8px"></div>
+    </div>` : ''}
+    <div class="mgr-section">
+      <div class="mgr-section-hd"><b>部队</b><span class="sub" id="fc-hint"></span><button class="btn-mini" id="fc-refresh">刷新</button></div>
+      <div id="fc-orphan"></div>
+      <div id="fc-body"><div class="hintline">读取中…</div></div>
+      <div class="wrow" style="margin-top:8px"><input type="text" id="fc-name" placeholder="新部队名称" style="flex:1"><input type="text" id="fc-world" placeholder="服务器（可空）" style="flex:1"><button class="btn-ghost" id="fc-create">创建</button></div>
+    </div>`;
+  $('set-hide-cost').addEventListener('change', e => setHideCost(e.target.checked));
+  $('fc-refresh').addEventListener('click', loadFc);
+  $('fc-create').addEventListener('click', createFc);
+  if (local) { loadLan(); $('lan-toggle').addEventListener('change', e => toggleLan(e.target.checked)); }
+  loadFc();
+}
+function setHideCost(on) {
+  S.hideCost = on;
+  try { localStorage.setItem('ff14hidecost', on ? '1' : '0'); } catch (e) {}
+  document.body.classList.toggle('hide-cost', on);
+  const cb = $('set-hide-cost'); if (cb) cb.checked = on;
+  toast(on ? '已隐藏成本' : '已显示成本');
+}
+async function loadLan() {
+  try { const d = await api('/api/lan'); $('lan-toggle').checked = d.enabled; renderLan(d); } catch (e) { $('lan-hint').textContent = '读取失败'; }
+}
+function renderLan(d) {
+  $('lan-hint').textContent = d.enabled ? '已开启' : '已关闭';
+  const port = location.port || d.port;
+  $('lan-body').innerHTML = d.enabled ? (d.addresses || []).map(a => { const url = `http://${a}:${port}/`; return `<div class="wrow" style="align-items:center;padding:3px 0"><code style="flex:1;font-size:12px">${url}</code><button class="btn-mini" data-lan-copy="${url}">复制</button></div>`; }).join('') : '<div class="hintline">关闭中</div>';
+  $('lan-body').querySelectorAll('[data-lan-copy]').forEach(b => b.addEventListener('click', () => copyText(b.dataset.lanCopy, '已复制地址')));
+}
+async function toggleLan(enabled) {
+  const d = await postJSON('/api/lan', { enabled });
+  if (!d.ok) { toast(d.error || '设置失败', 'warn'); $('lan-toggle').checked = !enabled; return; }
+  renderLan(d); toast(enabled ? '已开启手机访问' : '已关闭手机访问');
+}
+let fcData = null;
+async function loadFc() {
+  let d; try { d = await api('/api/fc'); } catch (e) { $('fc-body').innerHTML = '<div class="hintline bad">读取失败</div>'; return; }
+  fcData = d;
+  const orphan = d.orphan || {};
+  $('fc-orphan').innerHTML = orphan.rows > 0 ? `<div class="hintline warn" style="margin-bottom:8px">⚠ 有 ${orphan.rows} 行部队柜库存未归属部队（共 ${orphan.qty} 件）。把对应角色加入部队后点并入。<button class="btn-mini" id="fc-adopt" style="margin-left:6px">并入未归属库存</button></div>` : '';
+  if ($('fc-adopt')) $('fc-adopt').addEventListener('click', adoptFc);
+  const fcs = d.fcs || [];
+  $('fc-hint').textContent = fcs.length ? `${fcs.length} 个部队` : '还没有部队';
+  $('fc-body').innerHTML = fcs.length ? fcs.map(fc => `<div style="border-bottom:1px solid var(--line);padding:8px 0">
+    <div class="wrow" style="align-items:center"><b style="flex:1;font-size:13px">${escHtml(fc.name)}${fc.world ? '@' + escHtml(fc.world) : ''}</b><span class="hintline">${fc.stock_rows} 行 · ${fc.stock_qty} 件</span><button class="btn-mini" data-fc-rename="${fc.id}">改名</button><button class="btn-mini danger" data-fc-disband="${fc.id}">解散</button></div>
+    <div class="hintline" style="margin:4px 0">成员：${(fc.members || []).map(m => `${escHtml(m.name)} <button class="btn-mini" data-fc-remove="${fc.id}" data-char="${m.id}" style="padding:0 4px">✕</button>`).join('、') || '无'}</div>
+    <div class="wrow"><select data-fc-joinsel="${fc.id}" style="flex:1;height:28px"><option value="">加入角色…</option>${S.characters.filter(c => !(fc.members || []).some(m => m.id === c.id)).map(c => `<option value="${c.id}">${escHtml(c.name)}@${escHtml(c.world)}</option>`).join('')}</select><button class="btn-mini" data-fc-join="${fc.id}">加入</button></div>
+  </div>`).join('') : '<div class="hintline">还没有部队。创建一个，然后把角色加进去。</div>';
+  $('fc-body').querySelectorAll('[data-fc-rename]').forEach(b => b.addEventListener('click', () => renameFc(Number(b.dataset.fcRename))));
+  $('fc-body').querySelectorAll('[data-fc-disband]').forEach(b => b.addEventListener('click', () => disbandFc(Number(b.dataset.fcDisband))));
+  $('fc-body').querySelectorAll('[data-fc-remove]').forEach(b => b.addEventListener('click', () => joinFc(Number(b.dataset.fcRemove), 0)));
+  $('fc-body').querySelectorAll('[data-fc-join]').forEach(b => b.addEventListener('click', () => { const sel = $('fc-body').querySelector(`[data-fc-joinsel="${b.dataset.fcJoin}"]`); const cid = Number(sel.value); if (!cid) { toast('选一个角色', 'warn'); return; } joinFc(Number(b.dataset.fcJoin), cid); }));
+}
+async function createFc() {
+  const name = $('fc-name').value.trim();
+  if (!name) { toast('填部队名', 'warn'); return; }
+  const res = await postJSON('/api/fc', { name, world: $('fc-world').value.trim() });
+  if (!res.ok) { toast(res.error || '创建失败', 'warn'); return; }
+  toast('已创建部队：' + res.name); $('fc-name').value = ''; $('fc-world').value = ''; loadFc();
+}
+async function adoptFc() { const res = await postJSON('/api/fc/adopt', {}); if (!res.ok) { toast(res.error || '并入失败', 'warn'); return; } toast('已并入 ' + res.adopted + ' 行'); loadFc(); refreshAfterWrite(); }
+async function joinFc(fcId, charId) {
+  const res = await postJSON('/api/character/fc', { character_id: charId, fc_id: fcId });
+  if (!res.ok) { toast(res.error || '失败', 'warn'); return; }
+  toast(fcId ? '已加入部队' : '已移出部队'); loadFc();
+}
+function renameFc(id) {
+  const fc = (fcData.fcs || []).find(f => f.id === id);
+  openModal('改部队名', `<div class="wform"><div class="wfield"><label>部队名</label><input type="text" id="fc-newname" value="${escHtml(fc ? fc.name : '')}"></div><div class="wactions"><button class="btn-ghost" id="fc-rn-cancel">取消</button><button class="btn-primary" id="fc-rn-ok">保存</button></div></div>`, (body, close) => {
+  $('fc-rn-cancel').addEventListener('click', close);
+  $('fc-rn-ok').addEventListener('click', async () => { const res = await postJSON('/api/fc', { id, name: $('fc-newname').value.trim(), world: fc ? fc.world : '' }); if (!res.ok) { toast(res.error || '失败', 'warn'); return; } toast('已改名'); close(); loadFc(); });
+  });
+}
+function disbandFc(id) {
+  const fc = (fcData.fcs || []).find(f => f.id === id);
+  openModal('解散部队', `<div class="wform"><div class="hintline bad">解散「${escHtml(fc ? fc.name : '')}」（会先打快照）</div>
+    <label class="wcheck"><input type="radio" name="disband-mode" value="void" checked> 库存作废（留流水）</label>
+    <label class="wcheck"><input type="radio" name="disband-mode" value="empty"> 已搬空，直接解散</label>
+    <div class="wactions"><button class="btn-ghost" id="fc-db-cancel">取消</button><button class="btn-danger" id="fc-db-ok">确认解散</button></div></div>`, (body, close) => {
+  $('fc-db-cancel').addEventListener('click', close);
+  $('fc-db-ok').addEventListener('click', async () => {
+    const mode = body.querySelector('[name="disband-mode"]:checked').value;
+    const res = await postJSON('/api/fc/delete', { id, mode });
+    if (!res.ok) { toast(res.error || '失败', 'warn'); return; }
+    toast(`已解散（作废 ${res.voided} 行）`); close(); loadFc(); refreshAfterWrite();
+  });
+  });
+}
 function loadTools() {
   const local = S.local !== false;
   $('mgr-tools').innerHTML = `
@@ -2146,9 +2313,9 @@ async function runDiag() {
 // ━━━━━ 快照管理（数据页签；恢复/删除/清理/下载本机限定） ━━━━━
 let mgrSnapshots = [];
 async function loadSnapshots() {
-  $('mgr-data').innerHTML = '<div class="mgr-section"><div class="mgr-section-hd"><b>快照</b><span class="sub">读取中…</span></div></div>';
+  $('mgr-snap').innerHTML = '<div class="mgr-section"><div class="mgr-section-hd"><b>快照</b><span class="sub">读取中…</span></div></div>';
   let d;
-  try { d = await api('/api/snapshots'); } catch (e) { $('mgr-data').innerHTML = '<div class="mgr-section"><div class="mgr-section-hd"><b>快照</b></div><div class="hintline bad">读取失败：' + escHtml(e.message) + '</div></div>'; return; }
+  try { d = await api('/api/snapshots'); } catch (e) { $('mgr-snap').innerHTML = '<div class="mgr-section"><div class="mgr-section-hd"><b>快照</b></div><div class="hintline bad">读取失败：' + escHtml(e.message) + '</div></div>'; return; }
   mgrSnapshots = d.snapshots || [];
   renderSnapshots(d.keep || 30);
 }
@@ -2165,7 +2332,7 @@ function renderSnapshots(keep) {
       <button class="btn-mini" data-snap-preview="${escHtml(s.name)}">预览</button>${localBtns}
     </div>`;
   }).join('');
-  $('mgr-data').innerHTML = `
+  $('mgr-snap').innerHTML = `
     <div class="mgr-section">
       <div class="mgr-section-hd"><b>快照</b><span class="sub">${list.length} 个 · 自动保留最近 ${keep} 个</span></div>
       <div class="wrow" style="margin-bottom:10px"><input type="text" id="snap-note" placeholder="手动快照备注（可空）" style="flex:1"><button class="btn-ghost" id="snap-create">立即打快照</button>${local && legacy.length ? `<button class="btn-ghost" id="snap-cleanup">清理旧快照（${legacy.length}）</button>` : ''}</div>
@@ -2174,9 +2341,9 @@ function renderSnapshots(keep) {
     </div>`;
   $('snap-create').addEventListener('click', createSnapshot);
   if ($('snap-cleanup')) $('snap-cleanup').addEventListener('click', cleanupSnapshots);
-  $('mgr-data').querySelectorAll('[data-snap-preview]').forEach(b => b.addEventListener('click', () => previewSnapshot(b.dataset.snapPreview)));
-  $('mgr-data').querySelectorAll('[data-snap-restore]').forEach(b => b.addEventListener('click', () => restoreSnapshot(b)));
-  $('mgr-data').querySelectorAll('[data-snap-del]').forEach(b => b.addEventListener('click', () => deleteSnapshot(b)));
+  $('mgr-snap').querySelectorAll('[data-snap-preview]').forEach(b => b.addEventListener('click', () => previewSnapshot(b.dataset.snapPreview)));
+  $('mgr-snap').querySelectorAll('[data-snap-restore]').forEach(b => b.addEventListener('click', () => restoreSnapshot(b)));
+  $('mgr-snap').querySelectorAll('[data-snap-del]').forEach(b => b.addEventListener('click', () => deleteSnapshot(b)));
 }
 async function createSnapshot() {
   const res = await postJSON('/api/snapshot/create', { note: $('snap-note').value.trim() });
