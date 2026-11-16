@@ -783,7 +783,7 @@ function populateFilters() {
   $('f-location').innerHTML = '<option value="">全部位置</option>';
   const accounts = [...new Set(S.characters.map(c => c.account).filter(Boolean))];
   accounts.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; $('f-account').append(o); });
-  S.characters.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = `${c.name}@${c.world}`; $('f-character').append(o); });
+  S.characters.forEach(c => { const o = document.createElement('option'); o.value = c.name; o.textContent = `${c.name}@${c.world}`; $('f-character').append(o); });
   S.locations.forEach(l => { const o = document.createElement('option'); o.value = l; o.textContent = l; $('f-location').append(o); });
   $('f-account').value = S.account; $('f-character').value = S.character; $('f-location').value = S.location;
 }
@@ -943,7 +943,7 @@ function buildItemCard(it) {
   card.innerHTML = `<div class="item-main" data-action="select" data-id="${cardId}">
     <div class="item-icon-wrap">
       <div class="item-icon-placeholder" data-icon-ph="${iconId}">◈</div>
-      <img data-icon="${iconId}" src="" alt="" loading="lazy" style="display:none">
+      <img data-icon="${iconId}" src="" alt="" style="display:none">
     </div>
     <div class="item-info">
       <div class="item-name-row"><span class="item-name">${escHtml(it.name)}</span>${hqBadge}${safetyMap[it.item_id] ? `<span class="badge-line" data-action="card-safety" data-id="${cardId}" title="安全线 ${safetyMap[it.item_id].min_qty}，点击设置">线 ${safetyMap[it.item_id].min_qty}</span>` : ''}</div>
@@ -1025,7 +1025,7 @@ function updateActiveChips() {
     { key: 'q', label: () => `"${S.q}"` },
     { key: 'account', label: () => `账号: ${S.account}` },
     { key: 'character', label: () => {
-      const c = S.characters.find(x => String(x.id) === S.character);
+      const c = S.characters.find(x => x.name === S.character);
       return c ? `角色: ${c.name}` : `角色: ${S.character}`;
     }},
     { key: 'location', label: () => `位置: ${S.location}` },
@@ -1075,7 +1075,7 @@ function buildDetailHTML(it) {
   return `<div class="detail-head">
     <div class="detail-icon-wrap">
       <div class="item-icon-placeholder" data-icon-ph="${iconId}" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:24px;background:linear-gradient(135deg,#2a7180,#1a4a56);color:rgba(255,255,255,.6)">◈</div>
-      <img data-icon="${iconId}" src="" alt="" loading="lazy" style="display:none">
+      <img data-icon="${iconId}" src="" alt="" style="display:none">
     </div>
     <div style="flex:1">
       <div class="detail-name">${escHtml(it.name)} ${hqBadge}</div>
