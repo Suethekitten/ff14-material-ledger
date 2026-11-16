@@ -92,6 +92,19 @@ button:disabled { opacity: .45; cursor: default; }
 .topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .topbar-actions .btn-ghost { color: var(--nav-text); border-color: #3a4b60; height: 30px; }
 .topbar-actions .btn-ghost:hover { color: var(--nav-text-active); }
+.more-wrap { display: none; position: relative; }
+.more-menu {
+  position: absolute; right: 0; top: calc(100% + 8px); min-width: 148px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: var(--shadow-lg); padding: 6px; display: flex; flex-direction: column;
+  gap: 2px; z-index: 120;
+}
+.more-menu .btn-ghost {
+  width: 100%; text-align: left; height: 34px; color: var(--text);
+  border-color: transparent; padding: 0 10px;
+}
+.more-menu .btn-ghost:hover { background: var(--panel-2); }
+.more-menu .btn-ghost[hidden] { display: none; }
 /* 快捷键面板（与算料页共用同一套交互） */
 .hk-open { background: transparent; border: 1px solid #3a4b60; color: var(--nav-text); border-radius: 6px; height: 30px; width: 34px; font-size: 14px; }
 .hk-open:hover { color: var(--nav-text-active); }
@@ -416,6 +429,12 @@ body.hide-cost .cost-note, body.hide-cost .cost-row, body.hide-cost .cost-field 
 /* ━━━━━ 响应式 ━━━━━ */
 /* 平板/小屏 */
 @media (max-width: 768px) {
+  .more-wrap { display: block; }
+  /* JS 会把次要按钮移进「更多」；脚本执行前先不显示，避免首帧溢出 */
+  .topbar-actions > .btn-ghost, .topbar-actions > .hk-open { display: none; }
+  .topbar-actions > #btn-manage { display: inline-flex; align-items: center; }
+}
+@media (max-width: 768px) {
   .detail-pane { display: none; }
   .topbar-stats { display: none; }
   .topbar-brand .topbar-version { display: none; }
@@ -493,6 +512,10 @@ body.hide-cost .cost-note, body.hide-cost .cost-row, body.hide-cost .cost-field 
     <button class="btn-ghost" id="btn-manage">管理</button>
     <button class="btn-ghost" id="btn-export">导出</button>
     <button class="btn-ghost" id="btn-settings" title="连接设置">⚙</button>
+    <div class="more-wrap" id="more-wrap">
+      <button class="btn-ghost" id="btn-more" aria-haspopup="true" aria-expanded="false">更多</button>
+      <div class="more-menu" id="more-menu" hidden></div>
+    </div>
   </div>
 </header>
 
@@ -2631,6 +2654,62 @@ init();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
   else mount();
+})();
+</script>
+<script>
+/* 窄屏：把次要操作收进「更多」，只留管理 + 记账/筛选所在的筛选条 */
+(function () {
+  const mq = window.matchMedia("(max-width: 768px)");
+  const actions = document.querySelector(".topbar-actions");
+  const wrap = document.getElementById("more-wrap");
+  const menu = document.getElementById("more-menu");
+  const moreBtn = document.getElementById("btn-more");
+  if (!actions || !wrap || !menu || !moreBtn) return;
+  let moved = false;
+
+  function closeMenu() {
+    menu.hidden = true;
+    moreBtn.setAttribute("aria-expanded", "false");
+  }
+
+  function applyMoreLayout() {
+    const small = mq.matches;
+    if (small && !moved) {
+      [...actions.children].forEach((el) => {
+        if (el === wrap || el.id === "btn-manage") return;
+        menu.appendChild(el);
+      });
+      moved = true;
+    } else if (!small && moved) {
+      [...menu.children].forEach((el) => actions.insertBefore(el, wrap));
+      moved = false;
+      closeMenu();
+    }
+  }
+
+  moreBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+    moreBtn.setAttribute("aria-expanded", String(!menu.hidden));
+  });
+  menu.addEventListener("click", (e) => {
+    if (e.target.closest("button")) closeMenu();
+  });
+  document.addEventListener("click", (e) => {
+    if (menu.hidden) return;
+    if (menu.contains(e.target) || moreBtn.contains(e.target)) return;
+    closeMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.hidden) closeMenu();
+  });
+  mq.addEventListener("change", applyMoreLayout);
+  window.addEventListener("resize", applyMoreLayout);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", applyMoreLayout);
+  } else {
+    applyMoreLayout();
+  }
 })();
 </script>
 </body>
