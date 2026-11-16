@@ -674,12 +674,14 @@ function currentQtyForForm(cid, loc, name, hq) { return qtyIndex[`${cid}|${loc}|
 // ━━━━━ 写后统一刷新（收敛 V1 各操作不一致的刷新序列） ━━━━━
 async function refreshAfterWrite() {
   try {
-    const st = await api('/api/state');
+    const [st, ch] = await Promise.all([api('/api/state'), api('/api/characters')]);
+    S.characters = ch.characters || [];
     S.stock_rows = st.stock_rows || 0; S.total_qty = st.total_qty || 0; S.pending_rows = st.pending_rows || 0; S.character_count = st.character_count || 0;
     if (st.retainer_max) for (const k in st.retainer_max) retainerMax[k] = Math.max(Number(retainerMax[k]) || 0, Number(st.retainer_max[k]));
     $('stat-chars').textContent = S.character_count;
     $('stat-rows').textContent = fmtNum(S.stock_rows); $('stat-qty').textContent = fmtNum(S.total_qty);
     const b = $('btn-pending'); if (S.pending_rows > 0) { b.textContent = `未确认 ${S.pending_rows}`; b.hidden = false; } else b.hidden = true;
+    populateFilters();
   } catch (e) {}
   await search();
 }
@@ -744,7 +746,7 @@ async function search() {
     buildQtyIndex(S.items); learnRetainers(S.items);
     S.total_items = d.total_items || 0; S.hint = d.hint || '';
     if (d.stats) {
-      S.stock_rows = d.stats.stock_rows || S.stock_rows; S.total_qty = d.stats.total_qty || S.total_qty;
+      S.stock_rows = d.stats.stock_rows ?? S.stock_rows; S.total_qty = d.stats.total_qty ?? S.total_qty;
       $('stat-rows').textContent = fmtNum(S.stock_rows); $('stat-qty').textContent = fmtNum(S.total_qty);
     }
     setPhase(S.items.length === 0 ? 'empty' : 'ok');
@@ -1751,7 +1753,7 @@ function batchPreview() {
     if (add || cur == null) newCnt++; else overCnt++;
   });
   let msg = `将写入 ${ok} 行 · 新增 ${newCnt} · 覆盖 ${overCnt}` + (bad ? ` · 无法识别 ${bad}` : '');
-  if (dup) msg += ` ⚠ 有 ${dup} 行重复（同名+同位置+同品质），只保留最后一行`;
+  if (dup) msg += add ? ` ⚠ 有 ${dup} 行重复（同名+同位置+同品质），增量模式下会累加` : ` ⚠ 有 ${dup} 行重复（同名+同位置+同品质），只保留最后一行`;
   el.textContent = msg + '（基于当前搜索结果估算）'; el.className = 'hintline' + ((bad || dup) ? ' warn' : '');
 }
 function openBatch() {

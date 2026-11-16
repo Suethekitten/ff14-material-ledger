@@ -366,7 +366,6 @@ const QTY_MAX = 9999999;            // 与后端 MAX_ITEM_QTY 一致
 const ROW_DELAY_MS = 5000;
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-const fmtNum = n => n == null ? "—" : Number(n).toLocaleString("zh-CN");
 function parsePositiveInt(v) {
   const s = String(v == null ? "" : v).trim();
   if (!/^\d+$/.test(s)) return 0;
@@ -465,6 +464,8 @@ async function loadMode() {
     const s = await getJSON("/api/state");
     csrfToken = s.csrf_token || "";
     lite = Number(s.stock_rows) === 0;
+    $('version').textContent = 'v' + (s.version || '');
+    if (s.local === false) $('exit-btn').hidden = true;
   } catch (e) { lite = false; }
   const stock = $("stock");
   if (lite) { stock.checked = false; stock.disabled = true; $("stock-label").textContent = "算料模式（不查库存）"; }
@@ -539,7 +540,6 @@ function addTarget(id, name, qty, canHq) {
   saveTargets(); renderTargets(); markDirty(); loadTargetIcons();
   return true;
 }
-function resetInputFull() { resetInput(); }
 
 /* ━━━━━ 目标行渲染 / 事件 ━━━━━ */
 function renderTargets() {
