@@ -940,6 +940,19 @@ class CoreDataTest(unittest.TestCase):
             app.LAN_ENABLED = saved
             self._stop_http(httpd, thread)
 
+    def test_remote_early_403_drains_body(self):
+        httpd, thread, port = self._serve_http(self._remote_handler())
+        try:
+            headers = self._headers(port)
+            body = b'{"pad":"' + b"x" * 32768 + b'"}'
+            for _ in range(25):
+                status, _ = self._http(
+                    port, "POST", "/api/data/backup", headers, body
+                )
+                self.assertEqual(status, 403)
+        finally:
+            self._stop_http(httpd, thread)
+
     def test_security_guards_host_origin_csrf(self):
         httpd, thread, port = self._serve_http(app.Handler)
         try:

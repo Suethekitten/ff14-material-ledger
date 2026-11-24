@@ -5946,16 +5946,34 @@ class Handler(BaseHTTPRequestHandler):
                 pass
             return None, length, f"上传失败：{exc}"
 
+    def _discard_request_body(self) -> None:
+        """早退 403 前读掉请求体，避免 Windows 在未读数据上关闭连接触发 RST。"""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return
+        if length <= 0 or length > JSON_BODY_LIMIT:
+            return
+        remaining = length
+        while remaining > 0:
+            chunk = self.rfile.read(min(65536, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+
     def do_POST(self) -> None:  # noqa: N802
         note_request()
         if not self._client_allowed():
+            self._discard_request_body()
             self._json({"ok": False, "error": "手机访问未开启"}, 403)
             return
         route = urlparse(self.path).path
         if not self._request_trusted():
+            self._discard_request_body()
             self._json({"ok": False, "error": "请求来源不受信任，已拒绝"}, 403)
             return
         if route in LOCAL_ONLY_POST and not self._is_local_client():
+            self._discard_request_body()
             self._json({"ok": False, "error": "该功能只允许在本机使用"}, 403)
             return
         if route not in ("/api/db/preview", "/api/db/restore") and not self._content_type_ok():
