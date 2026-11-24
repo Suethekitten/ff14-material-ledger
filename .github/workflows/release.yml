@@ -170,6 +170,9 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             throw "已存在 Release：$env:TAG；拒绝覆盖"
           }
+          # pwsh 脚本结束时进程退出码取最后一条原生命令的 $LASTEXITCODE；
+          # "release 不存在" 的探测退出码 1 属预期，必须显式归零，否则整步误判失败
+          exit 0
 
       - name: Create draft release
         shell: pwsh
