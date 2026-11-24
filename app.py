@@ -45,7 +45,7 @@ from urllib.parse import parse_qs, quote, urlparse
 # 常量
 # --------------------------------------------------------------------------
 
-VERSION = "0.12.4"
+VERSION = "0.12.5"
 PENDING_LOC = "未确认"   # 删雇员栏位后，库存转进这个暂存位置
 CSRF_TOKEN = secrets.token_urlsafe(32)   # 每次启动重新生成；写请求需带 X-CSRF-Token
 
