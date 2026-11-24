@@ -1,0 +1,182 @@
+name: release-draft
+
+"on":
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "发布标签，如 v0.12.5"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check version
+        shell: pwsh
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne $env:TAG) {
+            throw "输入 tag 与 version.json 不一致：$env:TAG vs v$version"
+          }
+          python -B tools/sync_version.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Prepare test data
+        shell: pwsh
+        env:
+          FF14_STOCK_DATA: ${{ runner.temp }}\ff14-release-test
+        run: |
+          New-Item -ItemType Directory -Force -Path data | Out-Null
+          New-Item -ItemType Directory -Force -Path $env:FF14_STOCK_DATA | Out-Null
+          Copy-Item "tools/tests/fixtures/items.json" "data/items.json"
+          Copy-Item "tools/tests/fixtures/items.json" (Join-Path $env:FF14_STOCK_DATA "items.json")
+
+      - name: Run backend tests
+        env:
+          FF14_STOCK_DATA: ${{ runner.temp }}\ff14-release-test
+        run: python -B -m unittest tools.tests.test_core
+
+      - name: Build game data
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -B app.py --build-items
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -B app.py --build-recipes
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -B app.py --build-npc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $items = (Get-Content "data/items.json" -Raw | ConvertFrom-Json)
+          $itemCount = @($items.PSObject.Properties).Count
+          $recipes = (Get-Content "data/recipe.json" -Raw | ConvertFrom-Json)
+          $recipeCount = @($recipes.recipes.PSObject.Properties).Count
+          $npc = (Get-Content "data/npc_shop.json" -Raw | ConvertFrom-Json)
+          $npcCount = @($npc.items.PSObject.Properties).Count
+          Write-Host "items=$itemCount recipes=$recipeCount npc=$npcCount"
+          if ($itemCount -lt 40000 -or $recipeCount -lt 1000 -or $npcCount -lt 100) {
+            throw "游戏数据数量不足，拒绝打包"
+          }
+
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pip install pyinstaller
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m PyInstaller --noconfirm --clean `
+            --name ff14-stock --onedir --console --icon "icon.ico" `
+            --add-data "static;static" `
+            --add-data "data\items.json;data" `
+            --add-data "data\recipe.json;data" `
+            --add-data "data\npc_shop.json;data" `
+            app.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
+          $zip = "release/ff14-stock-v$version-win64.zip"
+          if (Test-Path $zip) {
+            throw "目标 ZIP 已存在，拒绝覆盖：$zip"
+          }
+          python -B pack_release.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path $zip)) {
+            throw "打包后没有找到：$zip"
+          }
+
+      - name: Check release package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
+          $zip = "release/ff14-stock-v$version-win64.zip"
+          python -B tools/check_release.py $zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Smoke EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $smoke = Join-Path $env:RUNNER_TEMP "release-smoke"
+          New-Item -ItemType Directory -Force -Path $smoke | Out-Null
+          $env:FF14_STOCK_DATA = $smoke
+          $process = Start-Process -FilePath "dist\ff14-stock\ff14-stock.exe" `
+            -ArgumentList "--port", "8899", "--no-browser" -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 60; $i++) {
+              $stateJson = curl.exe --noproxy "*" -s "http://127.0.0.1:8899/api/state"
+              if ($LASTEXITCODE -eq 0) {
+                $ready = $true
+                break
+              }
+              Start-Sleep -Seconds 1
+            }
+            if (-not $ready) { throw "EXE 未在 60 秒内启动" }
+            $state = $stateJson | ConvertFrom-Json
+            if (-not $state.ok) { throw "EXE /api/state 返回 ok:false" }
+            $html = curl.exe --noproxy "*" -s "http://127.0.0.1:8899/"
+            if ($LASTEXITCODE -ne 0 -or $html -notmatch "refreshAfterWrite") {
+              throw "EXE 根页面不是 V2 或不可访问"
+            }
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force $smoke -ErrorAction SilentlyContinue
+          }
+
+      - name: SHA-256
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
+          $zip = "release/ff14-stock-v$version-win64.zip"
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          "$hash  $zip" | Out-File -FilePath "$zip.sha256" -Encoding ascii
+          Write-Host "SHA256=$hash"
+
+      - name: Reject existing tag or release
+        shell: pwsh
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tagRef = git ls-remote origin "refs/tags/$env:TAG"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($tagRef) {
+            throw "远端已存在 tag：$env:TAG；拒绝覆盖"
+          }
+          gh release view $env:TAG 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            throw "已存在 Release：$env:TAG；拒绝覆盖"
+          }
+
+      - name: Create draft release
+        shell: pwsh
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
+          $zip = "release/ff14-stock-v$version-win64.zip"
+          $sha = "$zip.sha256"
+          gh release create $env:TAG $zip $sha --draft --title $env:TAG `
+            --notes "自动构建生成的草稿；SHA-256 见附件；发布说明由维护者核对后补充。"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
