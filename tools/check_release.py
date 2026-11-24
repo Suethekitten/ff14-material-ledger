@@ -80,10 +80,16 @@ def main(argv: list[str]) -> int:
 
     index = src.read_text("_internal/static/index.html")
     calc = src.read_text("_internal/static/calculator.html")
+    v2 = src.read_text("_internal/static/ff14-stock-v2.html")
+    planner = src.read_text("_internal/static/recipe-planner.html")
     css = src.read_text("_internal/static/recipe-test.css")
 
     check("包内 index.html 存在", index is not None, src.find("_internal/static/index.html") or "缺失")
     check("包内 calculator.html 存在", calc is not None, src.find("_internal/static/calculator.html") or "缺失")
+    check("包内 ff14-stock-v2.html 存在", v2 is not None,
+          src.find("_internal/static/ff14-stock-v2.html") or "缺失")
+    check("包内 recipe-planner.html 存在", planner is not None,
+          src.find("_internal/static/recipe-planner.html") or "缺失")
     check("包内 recipe-test.css 存在", css is not None, src.find("_internal/static/recipe-test.css") or "缺失")
     check("包内 ff14-stock.exe 存在", src.find("ff14-stock.exe") is not None,
           src.find("ff14-stock.exe") or "缺少 exe，包不可运行")
@@ -108,6 +114,14 @@ def main(argv: list[str]) -> int:
         m = re.search(r'<span class="tag">([^<]+)</span>', calc)
         tag = m.group(1) if m else "(未找到)"
         check(f"算料页角标 v{EXPECT_VERSION}", tag == f"v{EXPECT_VERSION}", f"实际 {tag}")
+
+    if v2:
+        check("V2：写入后刷新（refreshAfterWrite）", "refreshAfterWrite" in v2)
+        check("V2：管理抽屉（mgr-drawer）", "mgr-drawer" in v2)
+
+    if planner:
+        check("V2 算料：清单快照（snapshotList）", "snapshotList" in planner)
+        check("V2 算料：已保存清单下拉（saved-lists）", "saved-lists" in planner)
 
     if css:
         source_css = (PROJECT / "static" / "recipe-test.css").read_text(encoding="utf-8")

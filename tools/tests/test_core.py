@@ -965,6 +965,24 @@ class CoreDataTest(unittest.TestCase):
         finally:
             self._stop_http(httpd, thread)
 
+    def test_root_serves_v2_and_v1_direct_urls(self):
+        httpd, thread, port = self._serve_http(app.Handler)
+        try:
+            status, body = self._http(port, "GET", "/", {"Host": f"127.0.0.1:{port}"})
+            self.assertEqual(status, 200)
+            self.assertIn(b"refreshAfterWrite", body)
+            self.assertIn(b"mgr-drawer", body)
+
+            status, body = self._http(port, "GET", "/index.html", {"Host": f"127.0.0.1:{port}"})
+            self.assertEqual(status, 200)
+            self.assertIn(b"qty-mode", body)
+
+            status, body = self._http(port, "GET", "/calculator.html", {"Host": f"127.0.0.1:{port}"})
+            self.assertEqual(status, 200)
+            self.assertIn(b"dragListeners", body)
+        finally:
+            self._stop_http(httpd, thread)
+
     def test_lan_state_uses_actual_port(self):
         saved = app._PORT
         try:

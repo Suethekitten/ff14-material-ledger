@@ -5888,7 +5888,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # 静态文件
         if route in ("/", ""):
-            self._file(STATIC_DIR / "index.html")
+            self._file(STATIC_DIR / "ff14-stock-v2.html")
             return
         target = (STATIC_DIR / route.lstrip("/")).resolve()
         try:

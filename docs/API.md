@@ -244,6 +244,59 @@
 | `/api/recipe/expand` | `targets: [{item_id, quantity}]`（旧写法：顶层 `item_id`、`quantity`）、`stock?`（使用库存）、`overrides?`、`with_alternatives?`、`target_stock?`（缺省 true，成品本身也抵扣库存） | 展开配方。数量非法（小数、字符串、≤0、>9,999,999）返回 HTTP 400：`{ok:false, invalid:true, error:"数量必须是 1–9999999 的整数"}`。`unresolvable_items[]` 每项含 `item_id`、`name`、`reason` |
 | `/api/market/buy-plan` | `region?`、`hq?`、`items: [...]` | 按挂单逐档算买齐成本。返回 `status`（`ok` / `partial` / `failed`）、`failed_items`、`coverage`（`items`、`priced`、`short_items`、`failed_items`、`listings_truncated`、`truncated_items`）、`freshness`（`oldest_upload`、`newest_upload`）、`price_kind`、`tax_note`、`cached`、`error`。全部批次失败时 `ok:false, status:"failed"`；部分失败 `ok:true, status:"partial"`；`items`、`unresolved` 每行带 `name` |
 
+#### `/api/recipe/expand` 请求与返回结构
+
+请求：
+
+- `targets: [{item_id, quantity, hq?}]`（旧写法：顶层 `item_id`、`quantity`）。`hq` 为布尔，缺省 `false`；请求 HQ 但物品没有 HQ 版本时按 NQ 计算，并在返回里保留 `hq_requested:true`。
+- `stock?`：使用库存抵扣；`overrides?`：`{ "<item_id>": "buy" | "craft" }` 或 `{ "<item_id>": {source: "buy"|"craft"} }`；`with_alternatives?`：预留；`target_stock?`：缺省 `true`，目标成品本身也抵扣库存。
+- 数量非法（小数、字符串、≤0、>9,999,999，或同一目标合并后超限）返回 HTTP 400：`{ok:false, invalid:true, error:"数量必须是 1–9999999 的整数"}`。
+
+成功返回：
+
+```json
+{
+  "ok": true,
+  "data_version": "…",
+  "targets": [],
+  "intermediate": [],
+  "base": [],
+  "summary": {},
+  "unresolvable_items": []
+}
+```
+
+`targets[]` 每项：
+
+| 字段 | 说明 |
+|---|---|
+| `item_id`、`name`、`quantity` | 目标物品与请求数量 |
+| `hq` | 实际按 HQ 计算为 `true`；物品不能 HQ 时为 `false` |
+| `hq_requested` | 请求里是否要过 HQ |
+| `can_be_hq` | `1` 有 HQ / `0` 无 / `-1` 物品表未知 |
+| `need` | 合并后的总需求 |
+| `from_stock`、`from_stock_nq` | 库存抵扣数；`from_stock_nq` 是 HQ 目标额外提示的 NQ 可用量 |
+| `to_craft`、`craft_count`、`per_batch`、`produced`、`surplus` | 需自制数、批数、每批产量、总产出、结余；无配方时为 `0` / `null` |
+| `where` | 实际抵扣的库存明细：`character`、`world`、`location`、`qty`、`hq` |
+
+`intermediate[]` 与 `base[]` 每项：
+
+| 字段 | 说明 |
+|---|---|
+| `item_id`、`name`、`depth` | 物品、层级 |
+| `need`、`from_stock` | 总需求、库存抵扣 |
+| `source` | `craft` 自制 / `buy` 购买 / `gather` 采集 |
+| `to_craft`、`craft_count`、`per_batch`、`produced`、`surplus` | 自制节点字段；非自制为 `0` / `null` |
+| `to_buy` | `source=buy` 时需购买数 |
+| `to_get` | `base[]` 采集节点还差的数量 |
+| `where` | 库存抵扣明细，字段同 `targets[].where` |
+| `used_by` | 被哪些父节点使用：`[{item_id, name, qty}]` |
+| `alternative` | 当前为 `null`（预留） |
+
+`summary`：`base_kinds`、`intermediate_kinds`、`unknown_cost`（当前 `0`）、`unresolvable`、`max_depth`。
+
+`unresolvable_items[]`：`item_id`、`name`、`reason`（如配方成环、超过递归深度）。
+
 ### 本机专用
 
 以下接口其他设备调用一律 403。
@@ -269,3 +322,4 @@
 | 2026-11-15 | 0.12.3 | 补齐前端在用字段：买齐报价状态/覆盖/新鲜度、导入歧义、撤销 `code`、恢复四字段与 `stage`、对账 `type`、成本总览字段、配方 `invalid`/`unresolvable_items`、`/api/exit` 标本机 |
 | 2026-11-15 | 0.12.3 | `/api/state` 新增 `local`（仅用于前端隐藏本机按钮），补全 `/api/state`、`/api/search` 返回字段 |
 | 2026-11-15 | 0.12.4（准备中） | 补完全部剩余「待补」接口：库存预览/导出/安全线/未确认、审计、部队库存与冲突、配方/NPC 元数据、快照预览、部队归并 items；数据源改为固定 commit |
+| 2026-11-24 | 0.12.5 | 补 `/api/recipe/expand` 的 `targets[].hq` 请求字段与 `targets/intermediate/base/summary` 返回结构 |
