@@ -474,6 +474,7 @@ let workRevision = 0, serverWorking = null;
 let syncReady = false, syncTimer = null, syncApplying = false;
 let syncStatus = "idle";
 let syncConflict = null, deviceId = "";
+let syncTruncWarned = false;
 let drag = null;
 let priceOn = false, taxOn = true, sortMode = "qty";
 let priceRegion = "豆豆柴", priceScope = "dc", priceWorld = "", priceLabel = "";
@@ -1438,9 +1439,12 @@ function getDeviceId() {
 }
 function syncPayload() {
   const stockBox = $("stock");
-  const list = targets
-    .filter(t => t && Number(t.item_id) > 0 && parsePositiveInt(t.quantity))
-    .slice(0, 200)
+  const valid = targets.filter(t => t && Number(t.item_id) > 0 && parsePositiveInt(t.quantity));
+  if (valid.length > 200 && !syncTruncWarned) {
+    syncTruncWarned = true;
+    toast("清单超过 200 个目标，仅同步前 200 个");
+  }
+  const list = valid.slice(0, 200)
     .map(t => ({
       item_id: Number(t.item_id), name: String(t.name || ""),
       quantity: parsePositiveInt(t.quantity), hq: !!t.hq, can_hq: t.can_hq !== false,
@@ -1621,6 +1625,12 @@ async function migrateLegacyLists(lists) {
   }
   if (migrated) { toast(`已迁移 ${migrated} 份本机清单到服务器`); await refreshSavedMeta(); }
 }
+function workingCacheDiverged(local) {
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(WORKING_CACHE_KEY) || "null"); } catch (e) {}
+  if (!cached) return local.targets.length > 0 || Object.keys(local.overrides).length > 0;
+  return payloadKey(local) !== payloadKey(cached);
+}
 async function initSync() {
   deviceId = getDeviceId();
   syncReady = true;
@@ -1634,6 +1644,8 @@ async function initSync() {
   const local = syncPayload();
   const localHas = local.targets.length > 0 || Object.keys(local.overrides).length > 0;
   const localDirty = isWorkingDirty();
+  // V1 只改 TARGETS_KEY/OVERRIDES_KEY，不会写 planner 的缓存；缓存缺失或与当前本地值不一致也算未同步
+  const localUnsynced = localDirty || workingCacheDiverged(local);
   if (w && w.ok) {
     workRevision = Number(w.revision) || 0;
     serverWorking = w.payload;
@@ -1641,7 +1653,7 @@ async function initSync() {
     if (payloadKey(local) === payloadKey(w.payload)) {
       markWorkingDirty(false);
       setSyncStatus("synced", "清单同步：已同步");
-    } else if (!localHas || !localDirty) {
+    } else if (!localHas || !localUnsynced) {
       applySyncPayload(w.payload);
       markWorkingDirty(false);
       setSyncStatus("synced", "清单同步：已同步");
