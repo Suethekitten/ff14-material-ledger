@@ -136,7 +136,8 @@ jobs:
             $state = $stateJson | ConvertFrom-Json
             if (-not $state.ok) { throw "EXE /api/state 返回 ok:false" }
             $html = curl.exe --noproxy "*" -s "http://127.0.0.1:8899/"
-            if ($LASTEXITCODE -ne 0 -or $html -notmatch "refreshAfterWrite") {
+            # curl 多行输出在 PowerShell 里是数组，-notmatch 会返回"未匹配行集合"恒为真；用 -not(…-match…) 做存在性判断
+            if ($LASTEXITCODE -ne 0 -or -not ($html -match "refreshAfterWrite")) {
               throw "EXE 根页面不是 V2 或不可访问"
             }
           } finally {
