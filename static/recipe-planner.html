@@ -231,6 +231,27 @@ details.box > summary:hover { color: var(--accent); }
 .trade-foot { text-align: center; font-size: 12px; color: var(--muted); padding: 8px 0 24px; }
 .trade-foot button { background: transparent; border: 0; color: var(--accent); font-size: 12px; text-decoration: underline; }
 
+/* ━━━━━ S2 清单同步：冲突三选一 ━━━━━ */
+.sync-mask {
+  position: fixed; inset: 0; z-index: 500; background: rgba(15, 23, 42, .48);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.sync-box {
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: var(--shadow-lg); width: min(520px, 100%);
+  max-height: 88vh; overflow: auto; padding: 18px;
+}
+.sync-box h3 { margin: 0 0 8px; font-size: 16px; }
+.sync-compare {
+  margin-top: 10px; padding: 9px 11px; border-radius: 6px;
+  background: var(--panel-2); font-size: 13px; line-height: 1.8;
+}
+.sync-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.sync-actions button { min-height: 38px; }
+@media (max-width: 480px) {
+  .sync-actions button { flex: 1 1 100%; }
+}
+
 @media (max-width: 600px) {
   .wrap { padding: 10px; gap: 10px; }
   .panel { padding: 12px; }
@@ -340,6 +361,7 @@ details.box > summary:hover { color: var(--accent); }
   </details>
 
   <!-- 结果 -->
+  <div class="hintline" id="sync-status" style="padding:0 2px">清单同步：连接中…</div>
   <div class="panel" id="result">
     <div class="banner" id="result-error" role="alert" hidden>
       <span class="msg" id="result-error-text"></span>
@@ -357,6 +379,18 @@ details.box > summary:hover { color: var(--accent); }
 
 <button class="exit-btn" id="exit-btn">退出</button>
 <div class="toast" id="toast"></div>
+<div class="sync-mask" id="sync-mask" hidden>
+  <div class="sync-box" role="dialog" aria-modal="true" aria-labelledby="sync-title">
+    <h3 id="sync-title">清单冲突</h3>
+    <div class="hintline" id="sync-desc"></div>
+    <div class="sync-compare" id="sync-compare"></div>
+    <div class="sync-actions">
+      <button class="btn-ghost" id="sync-server">用服务器版本</button>
+      <button class="btn-primary" id="sync-local">用本机覆盖</button>
+      <button class="btn-ghost" id="sync-saveas">另存为新清单</button>
+    </div>
+  </div>
+</div>
 <div class="sr-only" id="live-status" aria-live="polite"></div>
 <div class="sr-only" id="live-alert" role="alert"></div>
 
@@ -415,6 +449,10 @@ const TARGET_STOCK_KEY = "recipeMultiTargetStockV1";
 const BASE_OPEN_KEY = "recipeMultiBaseOpenV1";
 const DELETED_KEY = "recipeMultiDeletedV1";
 const SAVED_KEY = "recipeSavedListsV1";
+const WORKING_CACHE_KEY = "recipeWorkingPayloadV1";
+const WORKING_DIRTY_KEY = "recipeWorkingDirtyV1";
+const DEVICE_KEY = "ff14_device_id";
+const WORKING_NAME = "__working__";
 let targets = [];
 let overrides = {};
 let targetStock = true;
@@ -431,6 +469,11 @@ let delArmedId = 0, delTimer = null;
 let clearArmed = false, clearTimer = null, lastDeleted = null;
 let delListArmed = "", delListTimer = null;
 let savedLists = [];
+let legacySavedLists = [];
+let workRevision = 0, serverWorking = null;
+let syncReady = false, syncTimer = null, syncApplying = false;
+let syncStatus = "idle";
+let syncConflict = null, deviceId = "";
 let drag = null;
 let priceOn = false, taxOn = true, sortMode = "qty";
 let priceRegion = "豆豆柴", priceScope = "dc", priceWorld = "", priceLabel = "";
@@ -439,8 +482,16 @@ const TAX_RATE = 1.05;
 function taxed(n) { const v = Number(n) || 0; return taxOn ? Math.round(v * TAX_RATE) : v; }
 function money(n) { return taxed(n).toLocaleString("en-US"); }
 
-function saveTargets() { try { localStorage.setItem(TARGETS_KEY, JSON.stringify(targets)); } catch (e) {} }
-function saveOverrides() { try { localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides)); } catch (e) {} }
+function saveTargets() {
+  try { localStorage.setItem(TARGETS_KEY, JSON.stringify(targets)); } catch (e) {}
+  cacheWorking();
+  queueWorkingSync();
+}
+function saveOverrides() {
+  try { localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides)); } catch (e) {}
+  cacheWorking();
+  queueWorkingSync();
+}
 function loadTargets() {
   try {
     const arr = JSON.parse(localStorage.getItem(TARGETS_KEY) || "[]");
@@ -1082,39 +1133,49 @@ async function applyPaste() {
 function snapshotList(name) {
   return { name, savedAt: Date.now(), targets: JSON.parse(JSON.stringify(targets)), overrides: JSON.parse(JSON.stringify(overrides)), stockOn: !lite && $("stock").checked, priceOn };
 }
-function saveSaved() { try { localStorage.setItem(SAVED_KEY, JSON.stringify(savedLists)); } catch (e) {} }
 function loadSaved() { try { const arr = JSON.parse(localStorage.getItem(SAVED_KEY) || "[]"); savedLists = Array.isArray(arr) ? arr.filter(s => s && Array.isArray(s.targets)) : []; } catch (e) { savedLists = []; } }
 function renderSaved() {
   const sel = $("saved-lists");
-  sel.innerHTML = savedLists.length ? savedLists.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join("") : '<option value="">（还没有保存的清单）</option>';
+  const rows = savedLists.filter(s => s && s.name && s.name !== WORKING_NAME);
+  sel.innerHTML = rows.length ? rows.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join("") : '<option value="">（还没有保存的清单）</option>';
 }
-function saveList() {
+async function saveList() {
   if (!targets.length) { toast("清单是空的"); return; }
-  const name = $("save-name").value.trim() || ("清单 " + new Date().toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }));
-  const snap = snapshotList(name);
-  const i = savedLists.findIndex(s => s.name === name);
-  if (i >= 0) savedLists[i] = snap; else savedLists.push(snap);
-  saveSaved(); renderSaved(); $("saved-lists").value = name;
-  toast("已保存：" + name);
+  const name = ($("save-name").value.trim() || ("清单 " + new Date().toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }))).slice(0, 60);
+  if (!name) { toast("清单名不能为空"); return; }
+  const existing = savedLists.find(s => s.name === name);
+  try {
+    const res = await postJSON("/api/recipe/list/save", {
+      name, base_revision: existing ? Number(existing.revision) || 0 : 0,
+      payload: syncPayload(), updated_by: deviceId,
+    });
+    if (!res.ok) {
+      toast(res.conflict ? "服务器上已有更新版本，请重新载入后再保存" : (res.error || "保存失败"), "warn");
+      if (res.conflict) await refreshSavedMeta();
+      return;
+    }
+    toast("已保存：" + name);
+    await refreshSavedMeta();
+    $("saved-lists").value = name;
+  } catch (e) { toast("保存失败：" + e.message, "warn"); }
 }
-function loadList() {
+async function loadList() {
   const name = $("saved-lists").value;
-  const snap = savedLists.find(s => s.name === name);
-  if (!snap) { toast("没有这个清单"); return; }
-  endDrag(); hideUndoDelete(); resetRowDelete(); resetClearAll(); resetDeleteList();
-  targets = (snap.targets || []).filter(t => t && Number(t.item_id) > 0 && parsePositiveInt(t.quantity))
-    .map(t => ({ item_id: Number(t.item_id), name: String(t.name || "#" + t.item_id), quantity: parsePositiveInt(t.quantity), hq: !!t.hq, can_hq: canHqFromApi(t.can_hq) }));
-  overrides = {};
-  for (const k in (snap.overrides || {})) if (/^\d+$/.test(k) && (snap.overrides[k] === "buy" || snap.overrides[k] === "craft")) overrides[k] = snap.overrides[k];
-  if (!lite) { $("stock").checked = !!snap.stockOn; $("stock-label").textContent = "使用库存"; syncTargetStock(); }
-  priceOn = !!snap.priceOn; $("price").checked = priceOn; $("price-bar").hidden = !priceOn;
-  saveTargets(); saveOverrides(); renderTargets(); loadTargetIcons();
-  dirty = true;
-  run();
-  toast("已载入：" + name);
+  if (!name) { toast("没有这个清单"); return; }
+  try {
+    const d = await getJSON("/api/recipe/list?name=" + encodeURIComponent(name));
+    if (!d.ok) { toast(d.error || "没有这个清单", "warn"); await refreshSavedMeta(); return; }
+    endDrag(); hideUndoDelete(); resetRowDelete(); resetClearAll(); resetDeleteList();
+    applySyncPayload(d.payload);
+    dirty = true;
+    renderTargets(); loadTargetIcons();
+    queueWorkingSync();
+    if (targets.length) run();
+    toast("已载入：" + name);
+  } catch (e) { toast("载入失败：" + e.message, "warn"); }
 }
 function resetDeleteList() { delListArmed = ""; clearTimeout(delListTimer); const b = $("del-list"); b.classList.remove("armed"); b.textContent = "删"; }
-function deleteList() {
+async function deleteList() {
   const name = $("saved-lists").value;
   if (!name) return;
   if (delListArmed !== name) {
@@ -1124,9 +1185,16 @@ function deleteList() {
     delListTimer = setTimeout(resetDeleteList, ROW_DELAY_MS);
     return;
   }
-  savedLists = savedLists.filter(s => s.name !== name);
-  saveSaved(); renderSaved(); resetDeleteList();
-  toast("已删除：" + name);
+  resetDeleteList();
+  const meta = savedLists.find(s => s.name === name);
+  try {
+    const res = await postJSON("/api/recipe/list/delete", {
+      name, base_revision: meta ? Number(meta.revision) || 0 : 0,
+    });
+    if (!res.ok) { toast(res.error || "删除失败", "warn"); }
+    else toast("已删除：" + name);
+    await refreshSavedMeta();
+  } catch (e) { toast("删除失败：" + e.message, "warn"); }
 }
 function exportList() {
   if (!targets.length) { toast("清单是空的"); return; }
@@ -1360,10 +1428,355 @@ $("target-list").addEventListener("keydown", e => {
 window.addEventListener("pagehide", endDrag);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") endDrag(); });
 
+/* ━━━━━ S2 清单同步（服务器为唯一存储，localStorage 仅缓存） ━━━━━ */
+function getDeviceId() {
+  try {
+    let v = localStorage.getItem(DEVICE_KEY);
+    if (!v) { v = "dev-" + Math.random().toString(36).slice(2, 8); localStorage.setItem(DEVICE_KEY, v); }
+    return String(v).slice(0, 64);
+  } catch (e) { return "dev-local"; }
+}
+function syncPayload() {
+  const stockBox = $("stock");
+  const list = targets
+    .filter(t => t && Number(t.item_id) > 0 && parsePositiveInt(t.quantity))
+    .slice(0, 200)
+    .map(t => ({
+      item_id: Number(t.item_id), name: String(t.name || ""),
+      quantity: parsePositiveInt(t.quantity), hq: !!t.hq, can_hq: t.can_hq !== false,
+    }));
+  const ov = {};
+  for (const k in overrides) if (/^\d+$/.test(k) && (overrides[k] === "buy" || overrides[k] === "craft")) ov[k] = overrides[k];
+  return {
+    schema: 1, targets: list, overrides: ov,
+    stockOn: !!(stockBox && !lite && stockBox.checked),
+    targetStock: !!targetStock, priceOn: !!priceOn,
+  };
+}
+function payloadKey(p) {
+  p = p || {};
+  return JSON.stringify({
+    schema: Number(p.schema) || 1,
+    targets: (p.targets || []).map(t => ({
+      item_id: Number(t.item_id), name: String(t.name || ""),
+      quantity: Number(t.quantity), hq: !!t.hq, can_hq: t.can_hq !== false,
+    })),
+    overrides: p.overrides || {}, stockOn: !!p.stockOn,
+    targetStock: !!p.targetStock, priceOn: !!p.priceOn,
+  });
+}
+function payloadFromSnapshot(s) {
+  return {
+    schema: 1,
+    targets: (s.targets || []).filter(t => t && Number(t.item_id) > 0 && parsePositiveInt(t.quantity))
+      .slice(0, 200).map(t => ({
+        item_id: Number(t.item_id), name: String(t.name || ""),
+        quantity: parsePositiveInt(t.quantity), hq: !!t.hq, can_hq: t.can_hq !== false,
+      })),
+    overrides: s.overrides && typeof s.overrides === "object" ? s.overrides : {},
+    stockOn: !!s.stockOn, targetStock: s.targetStock !== false, priceOn: !!s.priceOn,
+  };
+}
+function cacheWorking() {
+  try { localStorage.setItem(WORKING_CACHE_KEY, JSON.stringify(syncPayload())); } catch (e) {}
+}
+function markWorkingDirty(dirty) {
+  try { localStorage.setItem(WORKING_DIRTY_KEY, dirty ? "1" : "0"); } catch (e) {}
+}
+function isWorkingDirty() {
+  try { return localStorage.getItem(WORKING_DIRTY_KEY) === "1"; } catch (e) { return false; }
+}
+function restoreWorkingCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WORKING_CACHE_KEY) || "null");
+    if (!raw || typeof raw !== "object") return;
+    if (!lite && typeof raw.stockOn === "boolean" && $("stock")) $("stock").checked = raw.stockOn;
+    if (typeof raw.targetStock === "boolean") {
+      targetStock = raw.targetStock; $("target-stock").checked = targetStock; syncTargetStock();
+    }
+    if (typeof raw.priceOn === "boolean") {
+      priceOn = raw.priceOn; $("price").checked = priceOn; $("price-bar").hidden = !priceOn;
+    }
+  } catch (e) {}
+}
+function applySyncPayload(p) {
+  if (!p || typeof p !== "object") return;
+  syncApplying = true;
+  try {
+    const arr = Array.isArray(p.targets) ? p.targets : [];
+    targets = arr.filter(t => t && Number(t.item_id) > 0 && parsePositiveInt(t.quantity))
+      .map(t => ({
+        item_id: Number(t.item_id), name: String(t.name || "#" + t.item_id),
+        quantity: parsePositiveInt(t.quantity), hq: !!t.hq, can_hq: canHqFromApi(t.can_hq),
+      }));
+    overrides = {};
+    for (const k in (p.overrides || {})) if (/^\d+$/.test(k) && (p.overrides[k] === "buy" || p.overrides[k] === "craft")) overrides[k] = p.overrides[k];
+    if (!lite && $("stock")) $("stock").checked = !!p.stockOn;
+    targetStock = p.targetStock !== false;
+    $("target-stock").checked = targetStock;
+    syncTargetStock();
+    priceOn = !!p.priceOn;
+    $("price").checked = priceOn;
+    $("price-bar").hidden = !priceOn;
+    try { localStorage.setItem(TARGET_STOCK_KEY, targetStock ? "1" : "0"); } catch (e) {}
+    saveTargets(); saveOverrides(); cacheWorking();
+    renderTargets(); loadTargetIcons();
+    dirty = true;
+  } finally { syncApplying = false; }
+}
+function setSyncStatus(state, text) {
+  syncStatus = state;
+  const el = $("sync-status");
+  if (!el) return;
+  el.textContent = text;
+  el.dataset.state = state;
+}
+function queueWorkingSync() {
+  if (syncApplying || !syncReady) return;
+  cacheWorking();
+  markWorkingDirty(true);
+  setSyncStatus("unsynced", "清单同步：待上传…");
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => { syncTimer = null; flushWorking(); }, 800);
+}
+let syncBusy = false;
+async function flushWorking() {
+  if (syncBusy || syncApplying) return;
+  if (!$("sync-mask").hidden) return;
+  const payload = syncPayload();
+  if (serverWorking && payloadKey(payload) === payloadKey(serverWorking)) {
+    setSyncStatus("synced", "清单同步：已同步");
+    return;
+  }
+  syncBusy = true;
+  try {
+    const res = await postJSON("/api/recipe/list/save", {
+      name: WORKING_NAME, base_revision: workRevision, payload, updated_by: deviceId,
+    });
+    if (res.ok) {
+      workRevision = Number(res.revision) || workRevision + 1;
+      serverWorking = payload;
+      markWorkingDirty(false);
+      if (payloadKey(syncPayload()) === payloadKey(payload)) setSyncStatus("synced", "清单同步：已同步");
+      else queueWorkingSync();
+    } else if (res.conflict) {
+      setSyncStatus("unsynced", "清单同步：有冲突");
+      openSyncConflict(res, false);
+    } else {
+      setSyncStatus("unsynced", "清单同步：未同步（" + (res.error || "保存失败") + "）");
+    }
+  } catch (e) {
+    setSyncStatus("unsynced", "清单同步：未同步（离线）");
+  } finally { syncBusy = false; }
+}
+async function fetchListMeta() {
+  const d = await getJSON("/api/recipe/lists");
+  if (!d || !d.ok) throw new Error((d && d.error) || "读取失败");
+  return Array.isArray(d.lists) ? d.lists : [];
+}
+async function refreshSavedMeta() {
+  try {
+    const lists = await fetchListMeta();
+    savedLists = lists.filter(x => x && x.name && x.name !== WORKING_NAME);
+    renderSaved();
+  } catch (e) { /* 离线时保留当前列表 */ }
+}
+function nextListName() {
+  let n = 2;
+  while (savedLists.some(s => s.name === "清单 " + n)) n++;
+  return "清单 " + n;
+}
+function openSyncConflict(server, startup) {
+  syncConflict = { server: server || {}, startup: !!startup };
+  const local = syncPayload();
+  const sp = (server && server.payload) || {};
+  $("sync-desc").textContent = startup
+    ? "本机与服务器都有清单，内容不同。请选择保留哪一份："
+    : "服务器上已有更新版本，本次保存没有覆盖它。请选择：";
+  $("sync-compare").innerHTML =
+    "本机：<b>" + local.targets.length + "</b> 个成品 · " + Object.keys(local.overrides).length + " 项来源指定<br>" +
+    "服务器：<b>" + ((sp.targets || []).length) + "</b> 个成品 · " + Object.keys(sp.overrides || {}).length + " 项来源指定" +
+    (server && server.updated_at ? " · " + esc(server.updated_at) : "");
+  $("sync-mask").hidden = false;
+  $("sync-server").focus();
+}
+function closeSyncConflict() {
+  $("sync-mask").hidden = true;
+  syncConflict = null;
+}
+async function migrateLegacyLists(lists) {
+  if (!legacySavedLists.length) return;
+  const names = new Set((lists || []).map(x => x.name));
+  let migrated = 0;
+  for (const s of legacySavedLists) {
+    if (!s || !s.name || s.name === WORKING_NAME) continue;
+    if (!Array.isArray(s.targets) || !s.targets.length) continue; // 空清单不覆盖
+    if (s.name.length > 60 || names.has(s.name)) continue;
+    try {
+      const res = await postJSON("/api/recipe/list/save", {
+        name: s.name, base_revision: 0, payload: payloadFromSnapshot(s), updated_by: deviceId,
+      });
+      if (res.ok) { migrated++; names.add(s.name); }
+    } catch (e) { /* 离线：保留本地缓存 */ }
+  }
+  if (migrated) { toast(`已迁移 ${migrated} 份本机清单到服务器`); await refreshSavedMeta(); }
+}
+async function initSync() {
+  deviceId = getDeviceId();
+  syncReady = true;
+  let lists;
+  try { lists = await fetchListMeta(); }
+  catch (e) { setSyncStatus("unsynced", "清单同步：未同步（离线）"); return; }
+  savedLists = lists.filter(x => x && x.name && x.name !== WORKING_NAME);
+  renderSaved();
+  let w = null;
+  try { w = await getJSON("/api/recipe/list?name=" + encodeURIComponent(WORKING_NAME)); } catch (e) {}
+  const local = syncPayload();
+  const localHas = local.targets.length > 0 || Object.keys(local.overrides).length > 0;
+  const localDirty = isWorkingDirty();
+  if (w && w.ok) {
+    workRevision = Number(w.revision) || 0;
+    serverWorking = w.payload;
+    const serverHas = ((w.payload && w.payload.targets) || []).length > 0 || Object.keys((w.payload && w.payload.overrides) || {}).length > 0;
+    if (payloadKey(local) === payloadKey(w.payload)) {
+      markWorkingDirty(false);
+      setSyncStatus("synced", "清单同步：已同步");
+    } else if (!localHas || !localDirty) {
+      applySyncPayload(w.payload);
+      markWorkingDirty(false);
+      setSyncStatus("synced", "清单同步：已同步");
+      if (targets.length) run();
+    } else if (!serverHas) {
+      try {
+        const res = await postJSON("/api/recipe/list/save", {
+          name: WORKING_NAME, base_revision: workRevision, payload: local, updated_by: deviceId,
+        });
+        if (res.ok) {
+          workRevision = Number(res.revision) || workRevision;
+          serverWorking = local;
+          markWorkingDirty(false);
+          setSyncStatus("synced", "清单同步：已同步");
+          toast("已把本机清单作为共享起点");
+        } else { setSyncStatus("unsynced", "清单同步：未同步（保存失败）"); }
+      } catch (e) { setSyncStatus("unsynced", "清单同步：未同步（离线）"); }
+    } else {
+      setSyncStatus("unsynced", "清单同步：有冲突");
+      openSyncConflict({ revision: w.revision, payload: w.payload, updated_at: w.updated_at }, true);
+    }
+  } else {
+    workRevision = 0;
+    serverWorking = null;
+    if (localHas) {
+      try {
+        const res = await postJSON("/api/recipe/list/save", {
+          name: WORKING_NAME, base_revision: 0, payload: local, updated_by: deviceId,
+        });
+        if (res.ok) {
+          workRevision = Number(res.revision) || 0;
+          serverWorking = local;
+          markWorkingDirty(false);
+          setSyncStatus("synced", "清单同步：已同步");
+          toast("已把本机清单作为共享起点");
+        } else { setSyncStatus("unsynced", "清单同步：未同步（保存失败）"); }
+      } catch (e) { setSyncStatus("unsynced", "清单同步：未同步（离线）"); }
+    } else {
+      markWorkingDirty(false);
+      setSyncStatus("synced", "清单同步：已同步");
+    }
+  }
+  await migrateLegacyLists(lists);
+}
+async function syncCheck() {
+  if (!syncReady || syncApplying || syncBusy) return;
+  if (!$("sync-mask").hidden) return;
+  if (syncStatus === "unsynced") { if (!syncTimer) flushWorking(); return; }
+  try {
+    const lists = await fetchListMeta();
+    savedLists = lists.filter(x => x.name && x.name !== WORKING_NAME);
+    renderSaved();
+    const meta = lists.find(x => x.name === WORKING_NAME);
+    if (!meta || Number(meta.revision) <= workRevision || syncTimer) return;
+    const w = await getJSON("/api/recipe/list?name=" + encodeURIComponent(WORKING_NAME));
+    if (!w || !w.ok) return;
+    workRevision = Number(w.revision) || workRevision;
+    serverWorking = w.payload;
+    if (payloadKey(w.payload) !== payloadKey(syncPayload())) {
+      applySyncPayload(w.payload);
+      markWorkingDirty(false);
+      setSyncStatus("updated", "清单同步：已同步其他设备");
+      toast("已同步其他设备");
+      if (targets.length) run();
+    }
+  } catch (e) { /* 离线时下次聚焦再试 */ }
+}
+
+/* 冲突三选一 */
+$("sync-server").addEventListener("click", () => {
+  const c = syncConflict;
+  if (!c) return;
+  closeSyncConflict();
+  applySyncPayload(c.server.payload || {});
+  workRevision = Number(c.server.revision) || 0;
+  serverWorking = c.server.payload || null;
+  markWorkingDirty(false);
+  setSyncStatus("synced", "清单同步：已同步");
+  if (targets.length) run();
+  toast("已使用服务器版本");
+});
+$("sync-local").addEventListener("click", async () => {
+  const c = syncConflict;
+  if (!c) return;
+  closeSyncConflict();
+  try {
+    const res = await postJSON("/api/recipe/list/save", {
+      name: WORKING_NAME, base_revision: Number(c.server.revision) || 0,
+      payload: syncPayload(), updated_by: deviceId,
+    });
+    if (res.ok) {
+      workRevision = Number(res.revision) || 0;
+      serverWorking = syncPayload();
+      markWorkingDirty(false);
+      setSyncStatus("synced", "清单同步：已同步");
+      toast("已用本机清单覆盖服务器");
+      if (targets.length) run();
+    } else if (res.conflict) {
+      openSyncConflict(res, false);
+    } else {
+      setSyncStatus("unsynced", "清单同步：未同步（" + (res.error || "保存失败") + "）");
+    }
+  } catch (e) { setSyncStatus("unsynced", "清单同步：未同步（离线）"); }
+});
+$("sync-saveas").addEventListener("click", async () => {
+  const c = syncConflict;
+  if (!c) return;
+  closeSyncConflict();
+  const name = nextListName();
+  try {
+    const res = await postJSON("/api/recipe/list/save", {
+      name, base_revision: 0, payload: syncPayload(), updated_by: deviceId,
+    });
+    if (!res.ok) { toast(res.error || "另存失败", "warn"); return; }
+    toast("已另存为：" + name);
+    await refreshSavedMeta();
+    applySyncPayload(c.server.payload || {});
+    workRevision = Number(c.server.revision) || 0;
+    serverWorking = c.server.payload || null;
+    markWorkingDirty(false);
+    setSyncStatus("synced", "清单同步：已同步");
+    if (targets.length) run();
+  } catch (e) { toast("另存失败：" + e.message, "warn"); }
+});
+
+window.addEventListener("online", () => { if (syncStatus === "unsynced") flushWorking(); });
+window.addEventListener("focus", syncCheck);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") syncCheck(); });
+
+
 /* ━━━━━ R3 事件绑定 ━━━━━ */
 $("price").addEventListener("change", () => {
   priceOn = $("price").checked;
   $("price-bar").hidden = !priceOn;
+  cacheWorking(); queueWorkingSync();
   if (priceOn) { if (lastData && lastData.ok) loadPrices(); }
   else { prices = {}; buyData = null; npcData = {}; if (lastData) render(); }
 });
@@ -1376,11 +1789,12 @@ $("scope").addEventListener("change", () => {
 });
 $("world").addEventListener("change", () => { priceWorld = $("world").value; if (priceOn && lastData) loadPrices(); });
 
-$("stock").addEventListener("change", () => { syncTargetStock(); markDirty(); });
+$("stock").addEventListener("change", () => { syncTargetStock(); cacheWorking(); queueWorkingSync(); markDirty(); });
 $("target-stock").addEventListener("change", e => {
   targetStock = e.target.checked;
   try { localStorage.setItem(TARGET_STOCK_KEY, targetStock ? "1" : "0"); } catch (err) {}
   syncTargetStock();
+  cacheWorking(); queueWorkingSync();
   if (targets.length && lastData) run(); else markDirty();
 });
 $("go").addEventListener("click", run);
@@ -1389,10 +1803,16 @@ $("result-error-close").addEventListener("click", hideResultError);
 
 /* ━━━━━ 启动 ━━━━━ */
 loadTargets(); loadOverrides(); loadTargetStock(); loadBaseOpen();
-loadDeletedSnapshot(); loadSaved(); renderSaved();
+loadDeletedSnapshot(); loadSaved(); legacySavedLists = savedLists.slice(); renderSaved();
 $("target-stock").checked = targetStock;
 renderTargets(); loadTargetIcons();
-loadMode().then(() => { loadMeta(); loadWorlds(); if (targets.length) run(); });
+loadMode().then(() => {
+  restoreWorkingCache();
+  loadMeta();
+  loadWorlds();
+  if (targets.length) run();
+  initSync();
+});
 
 /* ━━━━━ 退出（本机专用，两次确认） ━━━━━ */
 (function () {
