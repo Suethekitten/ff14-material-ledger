@@ -1043,6 +1043,9 @@ class CoreDataTest(unittest.TestCase):
         res = app.recipe_list_save("冲突清单", 0, self._list_payload(99))
         self.assertFalse(res["ok"])
         self.assertTrue(res["conflict"])
+        self.assertEqual(res["name"], "冲突清单")
+        self.assertTrue(res["error"])
+        self.assertTrue(res["updated_at"])
         self.assertEqual(res["revision"], 1)
         self.assertEqual(res["payload"]["targets"][0]["quantity"], 10)
         self.assertEqual(
@@ -1065,6 +1068,9 @@ class CoreDataTest(unittest.TestCase):
         res = app.recipe_list_delete("删冲突", 0)
         self.assertFalse(res["ok"])
         self.assertTrue(res["conflict"])
+        self.assertEqual(res["name"], "删冲突")
+        self.assertTrue(res["error"])
+        self.assertTrue(res["updated_at"])
         self.assertEqual(res["revision"], 1)
         self.assertEqual(res["payload"]["targets"][0]["quantity"], 10)
 
@@ -1108,6 +1114,9 @@ class CoreDataTest(unittest.TestCase):
             self.assertEqual(status, 409)
             result = json.loads(data.decode("utf-8"))
             self.assertTrue(result["conflict"])
+            self.assertEqual(result["name"], "HTTP冲突")
+            self.assertTrue(result["error"])
+            self.assertTrue(result["updated_at"])
             self.assertEqual(result["revision"], 1)
             self.assertEqual(result["payload"]["targets"][0]["quantity"], 10)
         finally:

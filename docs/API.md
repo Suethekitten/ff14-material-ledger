@@ -244,7 +244,7 @@
 | 接口 | 请求体 | 说明 |
 |---|---|---|
 | `/api/recipe/expand` | `targets: [{item_id, quantity}]`（旧写法：顶层 `item_id`、`quantity`）、`stock?`（使用库存）、`overrides?`、`with_alternatives?`、`target_stock?`（缺省 true，成品本身也抵扣库存） | 展开配方。数量非法（小数、字符串、≤0、>9,999,999）返回 HTTP 400：`{ok:false, invalid:true, error:"数量必须是 1–9999999 的整数"}`。`unresolvable_items[]` 每项含 `item_id`、`name`、`reason` |
-| `/api/recipe/list/save` | `name`、`base_revision`、`payload`、`updated_by?` | 新建用 `base_revision:0`；成功返回 `{ok,name,revision}`。版本不符 HTTP 409 `{ok:false, conflict:true, revision, payload}`，不静默覆盖 |
+| `/api/recipe/list/save` | `name`、`base_revision`、`payload`、`updated_by?` | 新建用 `base_revision:0`；成功返回 `{ok,name,revision}`。版本不符 HTTP 409 `{ok:false, conflict:true, error, name, revision, updated_at, payload}`，不静默覆盖 |
 | `/api/recipe/list/delete` | `name`、`base_revision?` | 幂等；`__working__` 不可删除；传了且版本不符返回 HTTP 409（同上） |
 | `/api/market/buy-plan` | `region?`、`hq?`、`items: [...]` | 按挂单逐档算买齐成本。返回 `status`（`ok` / `partial` / `failed`）、`failed_items`、`coverage`（`items`、`priced`、`short_items`、`failed_items`、`listings_truncated`、`truncated_items`）、`freshness`（`oldest_upload`、`newest_upload`）、`price_kind`、`tax_note`、`cached`、`error`。全部批次失败时 `ok:false, status:"failed"`；部分失败 `ok:true, status:"partial"`；`items`、`unresolved` 每行带 `name` |
 
@@ -322,7 +322,7 @@
 - `overrides` 键为数字串，值为 `buy` / `craft`；`stockOn/targetStock/priceOn` 必须布尔。
 - JSON 序列化后 ≤256KB；清单名 1–60 字符。
 - `base_revision` 是非负整数；每次成功 save 后 `revision` 自增 1。
-- 冲突时服务端返回当前 `revision` 和 `payload`，由前端三选一；恢复快照后 revision 可能回退，同样按冲突处理。
+- 冲突时 HTTP 409 返回 `{ok:false, conflict:true, error, name, revision, updated_at, payload}`，`error` 为“服务器上已有更新版本”等说明，`payload` 是服务器当前值；由前端三选一。恢复快照后 revision 可能回退，同样按冲突处理。
 - `updated_by` 可选，最多 64 字符；不传存空。
 - 清单不是危险操作，手机可读写，不加入 `LOCAL_ONLY`。
 
@@ -353,3 +353,4 @@
 | 2026-11-15 | 0.12.4（准备中） | 补完全部剩余「待补」接口：库存预览/导出/安全线/未确认、审计、部队库存与冲突、配方/NPC 元数据、快照预览、部队归并 items；数据源改为固定 commit |
 | 2026-11-24 | 0.12.5 | 补 `/api/recipe/expand` 的 `targets[].hq` 请求字段与 `targets/intermediate/base/summary` 返回结构 |
 | 2026-11-24 | 0.12.5 | 新增清单同步：`recipe_list` 表与 `GET /api/recipe/lists`、`GET /api/recipe/list`、`POST /api/recipe/list/save`、`POST /api/recipe/list/delete`；`base_revision` 冲突 HTTP 409 |
+| 2026-11-24 | 0.12.5 | S2 409 响应补 `error/name/updated_at`，save/delete 共用 |

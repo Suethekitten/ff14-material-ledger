@@ -7053,6 +7053,20 @@ def recipe_list_get(name) -> dict:
     }
 
 
+def _recipe_list_conflict(name, revision, updated_at="", payload=None,
+                          error="服务器上已有更新版本") -> dict:
+    """save/delete 共用的 409 响应；带 error 便于前端直接提示。"""
+    return {
+        "ok": False,
+        "conflict": True,
+        "error": error,
+        "name": name,
+        "revision": int(revision),
+        "updated_at": updated_at or "",
+        "payload": payload,
+    }
+
+
 def recipe_list_save(name, base_revision, payload, updated_by=None) -> dict:
     name, error = _recipe_list_name(name)
     if error:
@@ -7072,14 +7086,16 @@ def recipe_list_save(name, base_revision, payload, updated_by=None) -> dict:
     try:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT revision, payload FROM recipe_list"
+            "SELECT revision, payload, updated_at FROM recipe_list"
             " WHERE owner = ? AND name = ?",
             (OWNER, name),
         ).fetchone()
         if row is None:
             if base_revision != 0:
                 conn.rollback()
-                return {"ok": False, "conflict": True, "revision": 0, "payload": None}
+                return _recipe_list_conflict(
+                    name, 0, payload=None, error="服务器上没有这个清单"
+                )
             conn.execute(
                 "INSERT INTO recipe_list(owner, name, payload, revision, updated_at,"
                 " updated_by) VALUES(?,?,?,?,?,?)",
@@ -7094,12 +7110,9 @@ def recipe_list_save(name, base_revision, payload, updated_by=None) -> dict:
             except ValueError:
                 current_payload = None
             conn.rollback()
-            return {
-                "ok": False,
-                "conflict": True,
-                "revision": current_revision,
-                "payload": current_payload,
-            }
+            return _recipe_list_conflict(
+                name, current_revision, row["updated_at"], current_payload
+            )
         conn.execute(
             "UPDATE recipe_list SET payload = ?, revision = revision + 1,"
             " updated_at = ?, updated_by = ? WHERE owner = ? AND name = ?",
@@ -7129,7 +7142,7 @@ def recipe_list_delete(name, base_revision=None) -> dict:
     try:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT revision, payload FROM recipe_list"
+            "SELECT revision, payload, updated_at FROM recipe_list"
             " WHERE owner = ? AND name = ?",
             (OWNER, name),
         ).fetchone()
@@ -7142,12 +7155,9 @@ def recipe_list_delete(name, base_revision=None) -> dict:
             except ValueError:
                 current_payload = None
             conn.rollback()
-            return {
-                "ok": False,
-                "conflict": True,
-                "revision": int(row["revision"]),
-                "payload": current_payload,
-            }
+            return _recipe_list_conflict(
+                name, int(row["revision"]), row["updated_at"], current_payload
+            )
         conn.execute(
             "DELETE FROM recipe_list WHERE owner = ? AND name = ?", (OWNER, name)
         )
