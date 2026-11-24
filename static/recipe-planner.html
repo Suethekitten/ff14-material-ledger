@@ -1611,7 +1611,7 @@ function closeSyncConflict() {
 async function migrateLegacyLists(lists) {
   if (!legacySavedLists.length) return;
   const names = new Set((lists || []).map(x => x.name));
-  let migrated = 0;
+  let migrated = 0, truncated = 0;
   for (const s of legacySavedLists) {
     if (!s || !s.name || s.name === WORKING_NAME) continue;
     if (!Array.isArray(s.targets) || !s.targets.length) continue; // 空清单不覆盖
@@ -1620,10 +1620,15 @@ async function migrateLegacyLists(lists) {
       const res = await postJSON("/api/recipe/list/save", {
         name: s.name, base_revision: 0, payload: payloadFromSnapshot(s), updated_by: deviceId,
       });
-      if (res.ok) { migrated++; names.add(s.name); }
+      if (res.ok) {
+        migrated++;
+        const valid = s.targets.filter(t => t && Number(t.item_id) > 0 && parsePositiveInt(t.quantity)).length;
+        if (valid > 200) truncated++; // payloadFromSnapshot 会截到 200，必须告知
+        names.add(s.name);
+      }
     } catch (e) { /* 离线：保留本地缓存 */ }
   }
-  if (migrated) { toast(`已迁移 ${migrated} 份本机清单到服务器`); await refreshSavedMeta(); }
+  if (migrated) { toast(`已迁移 ${migrated} 份本机清单到服务器` + (truncated ? `；${truncated} 份超过 200 个目标，仅迁移前 200 个` : '')); await refreshSavedMeta(); }
 }
 function workingCacheDiverged(local) {
   let cached = null;
