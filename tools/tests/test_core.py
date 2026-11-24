@@ -51,7 +51,8 @@ class CoreDataTest(unittest.TestCase):
     def setUp(self):
         c = app.connect()
         try:
-            for table in ("stock", "ledger", "purchase", "alias", "stock_safety_line"):
+            for table in ("stock", "ledger", "purchase", "alias", "stock_safety_line",
+                          "recipe_list"):
                 c.execute(f"DELETE FROM {table} WHERE owner = ?", (app.OWNER,))
             c.commit()
         finally:
@@ -67,6 +68,20 @@ class CoreDataTest(unittest.TestCase):
             return int(c.execute("SELECT id FROM stock LIMIT 1").fetchone()["id"])
         finally:
             c.close()
+
+    def _list_payload(self, qty=10, hq=False):
+        item_id, _ = app.resolve_item("青铜锭")
+        return {
+            "schema": 1,
+            "targets": [{
+                "item_id": item_id, "name": "青铜锭", "quantity": qty,
+                "hq": hq, "can_hq": True,
+            }],
+            "overrides": {},
+            "stockOn": True,
+            "targetStock": True,
+            "priceOn": False,
+        }
 
     # ---- 库存 / 并发 ----
     def test_add_then_take_keeps_total(self):
@@ -1002,6 +1017,168 @@ class CoreDataTest(unittest.TestCase):
             self.assertIn(datasource.SAINT_GH, url)
             self.assertIn(datasource.SAINT_REF, url)
             self.assertNotIn("/master/", url)
+
+    # ---- 清单同步 S2 ----
+    def test_recipe_list_save_create_update_and_meta(self):
+        res = app.recipe_list_save("清单A", 0, self._list_payload())
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(res["revision"], 1)
+        got = app.recipe_list_get("清单A")
+        self.assertTrue(got["ok"], got)
+        self.assertEqual(got["payload"]["targets"][0]["quantity"], 10)
+
+        res = app.recipe_list_save("清单A", 1, self._list_payload(20), "phone")
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(res["revision"], 2)
+        got = app.recipe_list_get("清单A")
+        self.assertEqual(got["payload"]["targets"][0]["quantity"], 20)
+        meta = app.recipe_list_meta()
+        self.assertEqual(meta["lists"], [{
+            "name": "清单A", "revision": 2,
+            "updated_at": meta["lists"][0]["updated_at"], "updated_by": "phone",
+        }])
+
+    def test_recipe_list_conflict_returns_server_payload(self):
+        self.assertTrue(app.recipe_list_save("冲突清单", 0, self._list_payload(10))["ok"])
+        res = app.recipe_list_save("冲突清单", 0, self._list_payload(99))
+        self.assertFalse(res["ok"])
+        self.assertTrue(res["conflict"])
+        self.assertEqual(res["revision"], 1)
+        self.assertEqual(res["payload"]["targets"][0]["quantity"], 10)
+        self.assertEqual(
+            app.recipe_list_get("冲突清单")["payload"]["targets"][0]["quantity"], 10
+        )
+
+    def test_recipe_list_delete_idempotent_and_working_protected(self):
+        self.assertTrue(app.recipe_list_save("删我", 0, self._list_payload())["ok"])
+        self.assertTrue(app.recipe_list_delete("删我", 1)["ok"])
+        self.assertTrue(app.recipe_list_delete("删我")["ok"])
+        self.assertFalse(app.recipe_list_get("删我")["ok"])
+
+        self.assertTrue(app.recipe_list_save("__working__", 0, self._list_payload())["ok"])
+        res = app.recipe_list_delete("__working__")
+        self.assertFalse(res["ok"])
+        self.assertIn("不可删除", res["error"])
+
+    def test_recipe_list_delete_conflict_returns_server_payload(self):
+        self.assertTrue(app.recipe_list_save("删冲突", 0, self._list_payload())["ok"])
+        res = app.recipe_list_delete("删冲突", 0)
+        self.assertFalse(res["ok"])
+        self.assertTrue(res["conflict"])
+        self.assertEqual(res["revision"], 1)
+        self.assertEqual(res["payload"]["targets"][0]["quantity"], 10)
+
+    def test_recipe_list_validation_rejects_bad_payloads(self):
+        good = self._list_payload()
+        bad_payloads = []
+        p = dict(good, schema=2)
+        bad_payloads.append(p)
+        p = dict(good, targets=[dict(good["targets"][0], quantity=0)])
+        bad_payloads.append(p)
+        p = dict(good, targets=[dict(good["targets"][0], quantity=2.5)])
+        bad_payloads.append(p)
+        p = dict(good, targets=[dict(good["targets"][0], hq=1)])
+        bad_payloads.append(p)
+        p = dict(good, overrides={"5056": "foo"})
+        bad_payloads.append(p)
+        p = dict(good, overrides={"x": "buy"})
+        bad_payloads.append(p)
+        p = dict(good, targets=[dict(good["targets"][0], name="x" * 300000)])
+        bad_payloads.append(p)
+        for payload in bad_payloads:
+            res = app.recipe_list_save("校验", 0, payload)
+            self.assertFalse(res["ok"], payload)
+            self.assertTrue(res.get("invalid"), res)
+        self.assertFalse(app.recipe_list_save("x" * 61, 0, good)["ok"])
+        self.assertFalse(app.recipe_list_save("", 0, good)["ok"])
+        self.assertFalse(app.recipe_list_save("校验", 0, good, "x" * 65)["ok"])
+
+    def test_recipe_list_http_conflict_is_409(self):
+        self.assertTrue(app.recipe_list_save("HTTP冲突", 0, self._list_payload())["ok"])
+        httpd, thread, port = self._serve_http(app.Handler)
+        try:
+            body = json.dumps({
+                "name": "HTTP冲突",
+                "base_revision": 0,
+                "payload": self._list_payload(99),
+            }).encode("utf-8")
+            status, data = self._http(
+                port, "POST", "/api/recipe/list/save", self._headers(port), body
+            )
+            self.assertEqual(status, 409)
+            result = json.loads(data.decode("utf-8"))
+            self.assertTrue(result["conflict"])
+            self.assertEqual(result["revision"], 1)
+            self.assertEqual(result["payload"]["targets"][0]["quantity"], 10)
+        finally:
+            self._stop_http(httpd, thread)
+
+    def test_recipe_list_http_routes(self):
+        httpd, thread, port = self._serve_http(app.Handler)
+        try:
+            headers = self._headers(port)
+            body = json.dumps({
+                "name": "HTTPList",
+                "base_revision": 0,
+                "payload": self._list_payload(),
+            }).encode("utf-8")
+            status, data = self._http(
+                port, "POST", "/api/recipe/list/save", headers, body
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(data.decode("utf-8"))["revision"], 1)
+
+            status, data = self._http(port, "GET", "/api/recipe/lists", headers)
+            self.assertEqual(status, 200)
+            names = [x["name"] for x in json.loads(data.decode("utf-8"))["lists"]]
+            self.assertIn("HTTPList", names)
+
+            status, data = self._http(
+                port, "GET", "/api/recipe/list?name=HTTPList", headers
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(data.decode("utf-8"))["payload"]["schema"], 1)
+
+            body = json.dumps({"name": "HTTPList", "base_revision": 1}).encode("utf-8")
+            status, data = self._http(
+                port, "POST", "/api/recipe/list/delete", headers, body
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(json.loads(data.decode("utf-8"))["ok"])
+
+            status, data = self._http(
+                port, "GET", "/api/recipe/list?name=HTTPList", headers
+            )
+            self.assertEqual(status, 200)
+            self.assertFalse(json.loads(data.decode("utf-8"))["ok"])
+        finally:
+            self._stop_http(httpd, thread)
+
+    def test_recipe_list_survives_snapshot_restore(self):
+        self.assertTrue(app.recipe_list_save("快照清单", 0, self._list_payload(10))["ok"])
+        snap = app.create_snapshot("manual", "recipe-list-test")
+        self.assertTrue(app.recipe_list_save("快照清单", 1, self._list_payload(20))["ok"])
+        self.assertTrue(app.restore_snapshot(snap["name"])["ok"])
+        got = app.recipe_list_get("快照清单")
+        self.assertTrue(got["ok"], got)
+        self.assertEqual(got["revision"], 1)
+        self.assertEqual(got["payload"]["targets"][0]["quantity"], 10)
+
+    def test_recipe_list_table_is_created_for_old_db(self):
+        c = app.connect()
+        try:
+            c.execute("DROP TABLE recipe_list")
+            c.commit()
+        finally:
+            c.close()
+        app.init_db()
+        c = app.connect()
+        try:
+            count = c.execute("SELECT COUNT(*) FROM recipe_list").fetchone()[0]
+        finally:
+            c.close()
+        self.assertEqual(count, 0)
+        self.assertTrue(app.inspect_db_file(app.DB_PATH, strict=True)["ok"])
 
     # ---- 恢复 ----
     def test_restore_rejects_incomplete_schema(self):

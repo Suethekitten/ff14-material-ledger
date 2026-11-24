@@ -474,6 +474,16 @@ CREATE TABLE IF NOT EXISTS stock_safety_line (
     PRIMARY KEY (owner, item_id)
 );
 
+CREATE TABLE IF NOT EXISTS recipe_list (
+    owner      TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    payload    TEXT NOT NULL,
+    revision   INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT,
+    PRIMARY KEY (owner, name)
+);
+
 CREATE INDEX IF NOT EXISTS idx_stock_owner_item ON stock(owner, item_id);
 """
 
@@ -514,6 +524,7 @@ DB_ALL_COLUMNS = {
                  "unit_price", "location", "created_at", "ledger_id"},
     "fc": {"id", "owner", "name", "world", "created_at"},
     "stock_safety_line": {"owner", "item_id", "item_name", "min_qty", "updated_at"},
+    "recipe_list": {"owner", "name", "payload", "revision", "updated_at", "updated_by"},
 }
 
 CORE_TABLES = {"character", "stock", "ledger"}
@@ -5798,6 +5809,12 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/recipe/meta":
             self._json(recipe_meta())
             return
+        if route == "/api/recipe/lists":
+            self._json(recipe_list_meta())
+            return
+        if route == "/api/recipe/list":
+            self._json(recipe_list_get(arg("name")))
+            return
         if route == "/api/market/regions":
             self._json({"ok": True, "regions": market.regions()})
             return
@@ -6148,6 +6165,18 @@ class Handler(BaseHTTPRequestHandler):
                     # 默认沿用方案 A（目标也抵扣库存）；传 false 表示「按数量新做」
                     deduct_target=bool(payload.get("target_stock", True)),
                 )
+            elif route == "/api/recipe/list/save":
+                result = recipe_list_save(
+                    payload.get("name"),
+                    payload.get("base_revision"),
+                    payload.get("payload"),
+                    payload.get("updated_by"),
+                )
+            elif route == "/api/recipe/list/delete":
+                result = recipe_list_delete(
+                    payload.get("name"),
+                    payload.get("base_revision"),
+                )
             elif route == "/api/recipe/rebuild":
                 result = build_recipe_index(progress=lambda m: print("[配方] " + m, flush=True))
             elif route == "/api/stock/update":
@@ -6262,7 +6291,10 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001
             print(f"[快照] 钩子异常：{type(exc).__name__}: {exc}", flush=True)
 
-        self._json(result, 400 if isinstance(result, dict) and result.get("invalid") else 200)
+        status = 400 if isinstance(result, dict) and result.get("invalid") else (
+            409 if isinstance(result, dict) and result.get("conflict") else 200
+        )
+        self._json(result, status)
 
 
 # --------------------------------------------------------------------------
@@ -6899,6 +6931,233 @@ def expand_recipe(
         },
         "unresolvable_items": unresolvable_items,
     }
+
+
+RECIPE_LIST_WORKING = "__working__"
+RECIPE_LIST_NAME_MAX = 60
+RECIPE_LIST_PAYLOAD_MAX = 256 * 1024
+
+
+def _recipe_list_name(name) -> tuple[str, str]:
+    value = str(name or "").strip()
+    if not value:
+        return "", "清单名不能为空"
+    if len(value) > RECIPE_LIST_NAME_MAX:
+        return "", f"清单名不能超过 {RECIPE_LIST_NAME_MAX} 个字符"
+    return value, ""
+
+
+def _recipe_list_revision(value) -> tuple[int | None, str]:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None, "base_revision 必须是非负整数"
+    return value, ""
+
+
+def _recipe_list_updated_by(value) -> tuple[str | None, str]:
+    if value is None:
+        return None, ""
+    if not isinstance(value, str):
+        return None, "updated_by 必须是字符串"
+    text = value.strip()
+    if len(text) > 64:
+        return None, "updated_by 不能超过 64 个字符"
+    return (text or None), ""
+
+
+def _recipe_list_payload(payload) -> tuple[str, str]:
+    """校验工作清单 payload，返回 (压缩 JSON, 错误)。"""
+    if not isinstance(payload, dict):
+        return "", "payload 必须是 JSON 对象"
+    schema = payload.get("schema")
+    if isinstance(schema, bool) or schema != 1:
+        return "", "payload.schema 必须是 1"
+    targets = payload.get("targets")
+    if not isinstance(targets, list) or len(targets) > 200:
+        return "", "targets 必须是数组且不超过 200 条"
+    for t in targets:
+        if not isinstance(t, dict):
+            return "", "targets 每项必须是对象"
+        item_id = t.get("item_id")
+        if isinstance(item_id, bool) or not isinstance(item_id, int) or item_id <= 0:
+            return "", "targets.item_id 必须是正整数"
+        qty = t.get("quantity")
+        if not _valid_item_qty(qty):
+            return "", "targets.quantity 必须是 1–9999999 的整数"
+        if not isinstance(t.get("hq"), bool) or not isinstance(t.get("can_hq"), bool):
+            return "", "targets.hq / can_hq 必须是布尔值"
+    overrides = payload.get("overrides")
+    if not isinstance(overrides, dict):
+        return "", "overrides 必须是对象"
+    for key, value in overrides.items():
+        if not isinstance(key, str) or not key.isdigit():
+            return "", "overrides 的键必须是物品 ID 数字串"
+        if value not in ("buy", "craft"):
+            return "", "overrides 的值只能是 buy 或 craft"
+    for key in ("stockOn", "targetStock", "priceOn"):
+        if not isinstance(payload.get(key), bool):
+            return "", f"payload.{key} 必须是布尔值"
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    if len(text.encode("utf-8")) > RECIPE_LIST_PAYLOAD_MAX:
+        return "", "payload 超过 256KB"
+    return text, ""
+
+
+def recipe_list_meta() -> dict:
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT name, revision, updated_at, updated_by FROM recipe_list"
+            " WHERE owner = ? ORDER BY CASE WHEN name = ? THEN 0 ELSE 1 END, name",
+            (OWNER, RECIPE_LIST_WORKING),
+        ).fetchall()
+    finally:
+        conn.close()
+    return {
+        "ok": True,
+        "lists": [
+            {
+                "name": r["name"],
+                "revision": int(r["revision"]),
+                "updated_at": r["updated_at"],
+                "updated_by": r["updated_by"] or "",
+            }
+            for r in rows
+        ],
+    }
+
+
+def recipe_list_get(name) -> dict:
+    name, error = _recipe_list_name(name)
+    if error:
+        return {"ok": False, "error": error}
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT name, revision, payload FROM recipe_list"
+            " WHERE owner = ? AND name = ?",
+            (OWNER, name),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return {"ok": False, "error": "没有这个清单"}
+    try:
+        payload = json.loads(row["payload"])
+    except ValueError:
+        return {"ok": False, "error": "清单数据损坏"}
+    return {
+        "ok": True,
+        "name": row["name"],
+        "revision": int(row["revision"]),
+        "payload": payload,
+    }
+
+
+def recipe_list_save(name, base_revision, payload, updated_by=None) -> dict:
+    name, error = _recipe_list_name(name)
+    if error:
+        return {"ok": False, "invalid": True, "error": error}
+    base_revision, error = _recipe_list_revision(base_revision)
+    if error:
+        return {"ok": False, "invalid": True, "error": error}
+    updated_by, error = _recipe_list_updated_by(updated_by)
+    if error:
+        return {"ok": False, "invalid": True, "error": error}
+    payload_text, error = _recipe_list_payload(payload)
+    if error:
+        return {"ok": False, "invalid": True, "error": error}
+
+    ts = now_iso()
+    conn = connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT revision, payload FROM recipe_list"
+            " WHERE owner = ? AND name = ?",
+            (OWNER, name),
+        ).fetchone()
+        if row is None:
+            if base_revision != 0:
+                conn.rollback()
+                return {"ok": False, "conflict": True, "revision": 0, "payload": None}
+            conn.execute(
+                "INSERT INTO recipe_list(owner, name, payload, revision, updated_at,"
+                " updated_by) VALUES(?,?,?,?,?,?)",
+                (OWNER, name, payload_text, 1, ts, updated_by),
+            )
+            conn.commit()
+            return {"ok": True, "name": name, "revision": 1}
+        current_revision = int(row["revision"])
+        if base_revision != current_revision:
+            try:
+                current_payload = json.loads(row["payload"])
+            except ValueError:
+                current_payload = None
+            conn.rollback()
+            return {
+                "ok": False,
+                "conflict": True,
+                "revision": current_revision,
+                "payload": current_payload,
+            }
+        conn.execute(
+            "UPDATE recipe_list SET payload = ?, revision = revision + 1,"
+            " updated_at = ?, updated_by = ? WHERE owner = ? AND name = ?",
+            (payload_text, ts, updated_by, OWNER, name),
+        )
+        conn.commit()
+        return {"ok": True, "name": name, "revision": current_revision + 1}
+    except sqlite3.Error:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def recipe_list_delete(name, base_revision=None) -> dict:
+    name, error = _recipe_list_name(name)
+    if error:
+        return {"ok": False, "invalid": True, "error": error}
+    if name == RECIPE_LIST_WORKING:
+        return {"ok": False, "error": "工作清单不可删除"}
+    if base_revision is not None:
+        base_revision, error = _recipe_list_revision(base_revision)
+        if error:
+            return {"ok": False, "invalid": True, "error": error}
+
+    conn = connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT revision, payload FROM recipe_list"
+            " WHERE owner = ? AND name = ?",
+            (OWNER, name),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return {"ok": True, "name": name}
+        if base_revision is not None and base_revision != int(row["revision"]):
+            try:
+                current_payload = json.loads(row["payload"])
+            except ValueError:
+                current_payload = None
+            conn.rollback()
+            return {
+                "ok": False,
+                "conflict": True,
+                "revision": int(row["revision"]),
+                "payload": current_payload,
+            }
+        conn.execute(
+            "DELETE FROM recipe_list WHERE owner = ? AND name = ?", (OWNER, name)
+        )
+        conn.commit()
+        return {"ok": True, "name": name}
+    except sqlite3.Error:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 HTTP_UA = f"FF14-Stock-Ledger/{VERSION} (local inventory ledger)"
