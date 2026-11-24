@@ -2,7 +2,7 @@
 (function () {
   const STORE = "ff14_page_hotkeys_v1";
   const DEFAULTS = { stock: "alt+1", calc: "alt+2" };
-  const PAGES = { stock: "/", calc: "/calculator.html" };
+  const PAGES = { stock: "/index.html", calc: "/calculator.html" };
 
   function load() {
     try {
